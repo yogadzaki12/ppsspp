@@ -302,9 +302,9 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	vertexDebugFlags[VDF_FLIP_NORMAL_TESS] = flipNormalTess;
 	vertexDebugFlags[VDF_TEXCOORD_IN_VEC3] = texCoordInVec3;
 	vertexDebugFlags[VDF_VERTEX_RANGE_CULLING] = vertexRangeCulling;
-	const uint32_t vertexFlagValue = (uint32_t)vertexDebugFlags.to_ulong();
+	const uint32_t flag_value = (uint32_t)vertexDebugFlags.to_ulong();
 	bool patchShaderEnabled = ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == GLSL_VULKAN;
-	p.F("// flag_value: 0x%08x\n", vertexFlagValue);
+	p.F("// flag_value: 0x%x\n", flag_value);
 
 	if (compat.shaderLanguage == GLSL_VULKAN) {
 		WRITE(p, "\n");
@@ -1368,7 +1368,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "  v_8 = vec4(0.0);\n");
 
 		if (useHWTransform) {
-			WRITE(p, "  if (%uu == 0x2027410u) {\n", vertexFlagValue);
+			WRITE(p, "  if (%uu == 0x2027410u) {\n", flag_value);
 			WRITE(p, "    flag = 1;\n");
 			WRITE(p, "    mat3 patchView;\n");
 			WRITE(p, "    patchView[0] = vec3(u_view[0].xyz);\n");
@@ -1382,7 +1382,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "    v_6 = vec4(normalize(patchView[0]), 1.0);\n");
 			WRITE(p, "    v_7 = vec4(normalize(patchView[1]), 1.0);\n");
 			WRITE(p, "    v_8 = vec4(normalize(patchView[2]), 1.0);\n");
-			WRITE(p, "  } else if (%uu == 0x2006410u) {\n", vertexFlagValue);
+			WRITE(p, "  } else if (%uu == 0x2006410u) {\n", flag_value);
 			WRITE(p, "    flag = 2;\n");
 			WRITE(p, "    v_1 = vec4(worldnormal.xyz, 1.0);\n");
 			WRITE(p, "    v_2 = vec4(worldpos, 1.0);\n");
@@ -1440,6 +1440,6 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if (flipNormalTess) WRITE(p, "// flipNormalTess 23\n");
 	if (texCoordInVec3) WRITE(p, "// texCoordInVec3 24\n");
 	if (vertexRangeCulling) WRITE(p, "// vertexRangeCulling 25\n");
-	WRITE(p, "// flag_value: 0x%08x\n", vertexFlagValue);
+	WRITE(p, "// flag_value: 0x%x\n", flag_value);
 	return true;
 }
