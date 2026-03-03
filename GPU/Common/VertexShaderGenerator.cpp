@@ -16,10 +16,12 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "Common/StringUtils.h"
+#include "Common/File/FileUtil.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/GPU/ShaderWriter.h"
 #include "Common/GPU/thin3d.h"
 #include "Core/Config.h"
+#include "Core/ELF/ParamSFO.h"
 #include "Core/System.h"
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
@@ -40,6 +42,30 @@
 #undef WRITE
 
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+
+static const char *ShaderBackendFolderName(ShaderLanguage shaderLanguage) {
+	switch (shaderLanguage) {
+	case GLSL_VULKAN:
+		return "VULKAN";
+	case GLSL_1xx:
+	case GLSL_3xx:
+		return "OPENGL";
+	case HLSL_D3D11:
+		return "D3D11";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static std::string ScopedShaderOutputDir(ShaderLanguage shaderLanguage) {
+	std::string gameID = g_paramSFO.GetDiscID();
+	if (gameID.empty()) {
+		gameID = "UNKNOWN";
+	}
+	Path dir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / gameID / ShaderBackendFolderName(shaderLanguage);
+	File::CreateFullPath(dir);
+	return dir.ToString();
+}
 
 
 
@@ -316,7 +342,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
     bool is_opengles = false;
 
 #ifdef __VERTEXT_GLSL_FILE__
-    std::string dir_path = "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/glsl";
+	std::string dir_path = ScopedShaderOutputDir(compat.shaderLanguage);
     char file_name[128]={0};
     sprintf(file_name,"Vertex_0x%x.glsl",flag_value);
     std::string out_name = file_name;
@@ -1507,3 +1533,95 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 #endif
 	return true;
 }
+
+#if 0  // PATCH_VERTEX_VERBATIM_REMAINDER_START
+    //16384
+    *attrMask = 0;
+			gl_exts.push_back("#extension GL_EXT_clip_cull_distance : enable\n");
+    std::string dir_path = "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/glsl";
+    // See comment above this function (GenerateVertexShader).
+        if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+            is_opengles = true;
+            //flag_value
+            WRITE(p, "//****** my_varying_vs *********\n");
+            WRITE(p, "%s lowp flat int flag;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_2;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_3;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_4;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_5;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_6;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_7;\n", compat.varying_vs);
+            WRITE(p, "%s highp vec4 v_8;\n", compat.varying_vs);
+			WRITE(p, "  ldot = dot(toLight, worldnormal);  \n");
+    //角色   插入
+    //
+    /*
+    if(is_opengles) {
+        if (flag_value == 0x2027410) {
+            WRITE(p, " flag = 1;\n");
+            WRITE(p, "  mat3 v ;\n");
+                    WRITE(p, "  v[0] = vec3(u_view[0].xyz   );\n");
+                    WRITE(p, "  v[1] = vec3(u_view[1].xyz  );\n");
+                    WRITE(p, "  v[2] = vec3(u_view[2].xyz  );\n");
+                    WRITE(p, "  v_1 = vec4(worldnormal.xyz,1.0);\n");
+                    WRITE(p, "  v_2 = vec4(worldpos,1.0);\n");
+                    WRITE(p, "  v_3 =   vec4( normalize(vec3 (0.,10000.,2000.) *v),1.0);\n");
+                    WRITE(p, " v_4 =   vec4(normalize(vec3 (0.,10000.,-2000.) *v),1.0);\n");
+                    WRITE(p, "  v_5 =   vec4(v_3.x,-v_3.y,v_3.z,1.0);\n");
+        }else if(flag_value == 0x2006410){
+            WRITE(p, " flag = 2;\n");
+        else {
+            WRITE(p, " flag = 0;\n");
+    */
+	WRITE(p, "  if ((u_scaleX < 0.99) || (u_scaleY < 0.99)) {\n");
+	WRITE(p, "    %sgl_Position.x *= u_scaleX;\n", compat.vsOutPrefix);
+	WRITE(p, "    %sgl_Position.y *= u_scaleY;\n", compat.vsOutPrefix);
+    WRITE(p, "}\n");
+    WRITE(p,"\n");
+    if(highpFog) WRITE(p,"//    highpFog  0 \n");
+    if( highpTexcoord  ) WRITE(p,"// highpTexcoord   1 \n");
+    if( isModeThrough  ) WRITE(p,"//  isModeThrough  2 \n");
+    if( lmode  ) WRITE(p,"//lmode    3 \n");
+    if(  doTexture ) WRITE(p,"//  doTexture  4 \n");
+    if( doTextureTransform  ) WRITE(p,"// doTextureTransform  5  \n");
+    if( doShadeMapping  ) WRITE(p,"// doShadeMapping   6 \n");
+    if( flatBug  ) WRITE(p,"// flatBug   7 \n");
+    if( needsZWHack  ) WRITE(p,"// needsZWHack    8\n");
+    if( doFlatShading  ) WRITE(p,"//doFlatShading    9 \n");
+    if( useHWTransform  ) WRITE(p,"// useHWTransform   10 \n");
+    if( hasColor  ) WRITE(p,"// hasColor   11 \n");
+    if( hasNormal  ) WRITE(p,"//hasNormal    12 \n");
+    if( hasTexcoord  ) WRITE(p,"// hasTexcoord   13 \n");
+    if(  enableFog ) WRITE(p,"//  enableFog  14 \n");
+    if( flipNormal  ) WRITE(p,"// flipNormal   15 \n");
+    if( enableBones  ) WRITE(p,"// enableBones   16 \n");
+    if( enableLighting  ) WRITE(p,"// enableLighting   17 \n");
+    if( doBezier  ) WRITE(p,"//  doBezier  18 \n");
+    if( doSpline  ) WRITE(p,"//doSpline    19 \n");
+    if( hasColorTess  ) WRITE(p,"// hasColorTess   20 \n");
+    if( hasTexcoordTess  ) WRITE(p,"// hasTexcoordTess  21  \n");
+    if( hasNormalTess  ) WRITE(p,"// hasNormalTess   22 \n");
+    if( flipNormalTess  ) WRITE(p,"// flipNormalTess   23 \n");
+    if( texCoordInVec3  ) WRITE(p,"//  texCoordInVec3  24 \n");
+    if( vertexRangeCulling  ) WRITE(p,"// vertexRangeCulling   25 \n");
+    WRITE(p,"//flag_value: 0x%x \n",flag_value);
+    std::ifstream glsl_in(dir_path + "/" + out_name);
+    if (glsl_in.is_open()) {
+        memset(buffer, 0x20, 16384);
+        int file_size = 0;
+        glsl_in.seekg(0, glsl_in.end);
+        file_size = glsl_in.tellg();
+        glsl_in.seekg(0, glsl_in.beg);
+        char *new_code = new char[file_size];
+        memset(new_code, 0x00, file_size);
+        glsl_in.read(new_code, file_size);
+        WRITE(p, new_code);
+        delete[]new_code;
+        glsl_in.close();
+        std::ofstream glsl_out(dir_path + "/" + out_name);
+        if (glsl_out.is_open()) {
+            glsl_out.write( buffer , 16384 ) ;
+            glsl_out.close();
+
+#endif  // PATCH_VERTEX_VERBATIM_REMAINDER_END
