@@ -294,7 +294,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (doTexture) {
 			WRITE(p, "layout (location = 0) in highp vec3 v_texcoord;\n");
 		}
-		WRITE(p, "layout (location = 4) flat in lowp int v_patchFlag;\n");
+		WRITE(p, "layout (location = 4) flat in lowp int flag;\n");
 		WRITE(p, "layout (location = 5) in highp vec4 v_1;\n");
 		WRITE(p, "layout (location = 6) in highp vec4 v_2;\n");
 		WRITE(p, "layout (location = 7) in highp vec4 v_3;\n");
@@ -483,8 +483,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "%s %s vec3 v_texcoord;\n", compat.varying_fs, highpTexcoord ? "highp" : "mediump");
 		}
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
-			const char *flatQual = compat.glslES30 ? "flat " : "";
-			WRITE(p, "%s %slowp int v_patchFlag;\n", compat.varying_fs, flatQual);
+			WRITE(p, "%s lowp flat int flag;\n", compat.varying_fs);
 			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_fs);
 			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_fs);
 			WRITE(p, "%s highp vec4 v_3;\n", compat.varying_fs);
