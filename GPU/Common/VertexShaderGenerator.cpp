@@ -272,6 +272,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		numBoneWeights = 1 + id.Bits(VS_BIT_BONES, 3);
 	}
 	bool texCoordInVec3 = false;
+	bool doTexture = true;
+	bool enableFog = true;
 
 	bool vertexRangeCulling = id.Bit(VS_BIT_VERTEX_RANGE_CULLING) && !isModeThrough;
 	bool clipClampedDepth = !isModeThrough && gstate_c.Use(GPU_USE_DEPTH_CLAMP) && gstate_c.Use(GPU_USE_CLIP_DISTANCE);
@@ -344,7 +346,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 #ifdef __VERTEXT_GLSL_FILE__
 	std::string dir_path = ScopedShaderOutputDir(compat.shaderLanguage);
     char file_name[128]={0};
-    sprintf(file_name,"Vertex_0x%x.glsl",flag_value);
+	sprintf(file_name,"Vertex_0x%lx.glsl",flag_value);
     std::string out_name = file_name;
 #endif
 
@@ -1505,7 +1507,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if( flipNormalTess  ) WRITE(p,"// flipNormalTess   23 \n");
 	if( texCoordInVec3  ) WRITE(p,"//  texCoordInVec3  24 \n");
 	if( vertexRangeCulling  ) WRITE(p,"// vertexRangeCulling   25 \n");
-	WRITE(p,"//flag_value: 0x%x \n",flag_value);
+	WRITE(p,"//flag_value: 0x%lx \n",flag_value);
 #ifdef __VERTEXT_GLSL_FILE__
 	if(is_opengles) {
 		std::ifstream glsl_in(dir_path + "/" + out_name);
