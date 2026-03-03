@@ -294,6 +294,15 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (doTexture) {
 			WRITE(p, "layout (location = 0) in highp vec3 v_texcoord;\n");
 		}
+		WRITE(p, "layout (location = 4) flat in lowp int v_patchFlag;\n");
+		WRITE(p, "layout (location = 5) in highp vec4 v_1;\n");
+		WRITE(p, "layout (location = 6) in highp vec4 v_2;\n");
+		WRITE(p, "layout (location = 7) in highp vec4 v_3;\n");
+		WRITE(p, "layout (location = 8) in highp vec4 v_4;\n");
+		WRITE(p, "layout (location = 9) in highp vec4 v_5;\n");
+		WRITE(p, "layout (location = 10) in highp vec4 v_6;\n");
+		WRITE(p, "layout (location = 11) in highp vec4 v_7;\n");
+		WRITE(p, "layout (location = 12) in highp vec4 v_8;\n");
 
 		if (enableAlphaTest && !alphaTestAgainstZero) {
 			WRITE(p, "int roundAndScaleTo255i(in highp float x) { return int(floor(x * 255.0 + 0.5)); }\n");

@@ -303,7 +303,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	vertexDebugFlags[VDF_TEXCOORD_IN_VEC3] = texCoordInVec3;
 	vertexDebugFlags[VDF_VERTEX_RANGE_CULLING] = vertexRangeCulling;
 	const uint32_t vertexFlagValue = (uint32_t)vertexDebugFlags.to_ulong();
-	bool isOpenGLShader = ShaderLanguageIsOpenGL(compat.shaderLanguage);
+	bool patchShaderEnabled = ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == GLSL_VULKAN;
 	p.F("// flag_value: 0x%08x\n", vertexFlagValue);
 
 	if (compat.shaderLanguage == GLSL_VULKAN) {
@@ -351,6 +351,15 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "layout (location = 0) out highp vec3 v_texcoord;\n");
 
 		WRITE(p, "layout (location = 3) out highp float v_fogdepth;\n");
+		WRITE(p, "layout (location = 4) flat out lowp int v_patchFlag;\n");
+		WRITE(p, "layout (location = 5) out highp vec4 v_1;\n");
+		WRITE(p, "layout (location = 6) out highp vec4 v_2;\n");
+		WRITE(p, "layout (location = 7) out highp vec4 v_3;\n");
+		WRITE(p, "layout (location = 8) out highp vec4 v_4;\n");
+		WRITE(p, "layout (location = 9) out highp vec4 v_5;\n");
+		WRITE(p, "layout (location = 10) out highp vec4 v_6;\n");
+		WRITE(p, "layout (location = 11) out highp vec4 v_7;\n");
+		WRITE(p, "layout (location = 12) out highp vec4 v_8;\n");
 
 		WRITE(p, "invariant gl_Position;\n");
 	} else if (compat.shaderLanguage == HLSL_D3D11) {
@@ -581,7 +590,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "%s mediump float v_fogdepth;\n", compat.varying_vs);
 		}
 
-		if (isOpenGLShader) {
+		if (patchShaderEnabled) {
 			const char *flatQual = compat.glslES30 ? "flat " : "";
 			WRITE(p, "//****** my_varying_vs *********\n");
 			WRITE(p, "%s %slowp int v_patchFlag;\n", compat.varying_vs, flatQual);
@@ -1348,7 +1357,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	// We've named the output gl_Position in HLSL as well.
 	WRITE(p, "  %sgl_Position = outPos;\n", compat.vsOutPrefix);
 
-	if (isOpenGLShader) {
+	if (patchShaderEnabled) {
 		WRITE(p, "  v_patchFlag = 0;\n");
 		WRITE(p, "  v_1 = vec4(0.0);\n");
 		WRITE(p, "  v_2 = vec4(0.0);\n");
