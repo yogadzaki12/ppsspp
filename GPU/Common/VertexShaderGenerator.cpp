@@ -1380,8 +1380,14 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "    v_3 = vec4(normalize(vec3(0.0, 10000.0, 2000.0) * patchView), 1.0);\n");
 			WRITE(p, "    v_4 = vec4(normalize(vec3(0.0, 10000.0, -2000.0) * patchView), 1.0);\n");
 			WRITE(p, "    v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
+			WRITE(p, "    v_6 = vec4(normalize(patchView[0]), 1.0);\n");
+			WRITE(p, "    v_7 = vec4(normalize(patchView[1]), 1.0);\n");
+			WRITE(p, "    v_8 = vec4(normalize(patchView[2]), 1.0);\n");
 			WRITE(p, "  } else if (%uu == 0x2006410u) {\n", vertexFlagValue);
 			WRITE(p, "    v_patchFlag = 2;\n");
+			WRITE(p, "    v_1 = vec4(worldnormal.xyz, 1.0);\n");
+			WRITE(p, "    v_2 = vec4(worldpos, 1.0);\n");
+			WRITE(p, "    v_6 = vec4(normalize(u_view[2].xyz), 1.0);\n");
 			WRITE(p, "  }\n");
 		}
 	}

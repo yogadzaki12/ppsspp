@@ -1151,8 +1151,20 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	if (ge2BloomPatchEnabled) {
 		WRITE(p, "  if (v_patchFlag != 0) {\n");
+		WRITE(p, "    vec3 patchNormal = normalize(v_1.xyz);\n");
+		WRITE(p, "    vec3 patchWorldPos = v_2.xyz;\n");
+		WRITE(p, "    vec3 patchCamDir = normalize(-patchWorldPos);\n");
+		WRITE(p, "    vec3 patchAxis0 = normalize(v_3.xyz);\n");
+		WRITE(p, "    vec3 patchAxis1 = normalize(v_4.xyz);\n");
+		WRITE(p, "    vec3 patchAxis2 = normalize(v_5.xyz);\n");
+		WRITE(p, "    vec3 patchViewF = normalize(v_8.xyz);\n");
 		WRITE(p, "    float patchLuma = dot(v.rgb, vec3(0.2126, 0.7152, 0.0722));\n");
-		WRITE(p, "    float patchReduce = clamp((patchLuma - 0.55) * 0.65, 0.0, 0.45);\n");
+		WRITE(p, "    float patchFacing = max(dot(patchNormal, patchAxis0), max(dot(patchNormal, patchAxis1), dot(patchNormal, patchAxis2)));\n");
+		WRITE(p, "    float patchViewFacing = clamp(dot(patchNormal, patchViewF), 0.0, 1.0);\n");
+		WRITE(p, "    float patchRim = clamp(1.0 - abs(dot(patchNormal, patchCamDir)), 0.0, 1.0);\n");
+		WRITE(p, "    float patchDistance = clamp(length(patchWorldPos) * 0.03, 0.0, 1.0);\n");
+		WRITE(p, "    float patchReduce = clamp((patchLuma - 0.48) * 0.50 + patchFacing * 0.18 + patchViewFacing * 0.12 + patchRim * 0.14 - patchDistance * 0.10, 0.0, 0.58);\n");
+		WRITE(p, "    if (v_patchFlag == 2) patchReduce *= 0.65;\n");
 		WRITE(p, "    v.rgb *= (1.0 - patchReduce);\n");
 		WRITE(p, "  }\n");
 	}
