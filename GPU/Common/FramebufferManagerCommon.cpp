@@ -32,8 +32,6 @@
 #include "Core/Core.h"
 #include "Core/CoreParameter.h"
 #include "Core/Debugger/MemBlockInfo.h"
-#include "Core/ELF/ParamSFO.h"
-#include "Core/System.h"
 #include "GPU/Common/DrawEngineCommon.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/PresentationCommon.h"
@@ -44,10 +42,6 @@
 
 static size_t FormatFramebufferName(const VirtualFramebuffer *vfb, char *tag, size_t len) {
 	return snprintf(tag, len, "FB_%08x_%08x_%dx%d_%s", vfb->fb_address, vfb->z_address, vfb->bufferWidth, vfb->bufferHeight, GeBufferFormatToString(vfb->fb_format));
-}
-
-static bool IsGodEater2DiscID(std::string_view discID) {
-	return discID == "ULJS00597" || discID == "NPJH50832" || discID == "ULJS19093";
 }
 
 FramebufferManagerCommon::FramebufferManagerCommon(Draw::DrawContext *draw)
@@ -94,13 +88,6 @@ bool FramebufferManagerCommon::UpdateRenderSize(int msaaLevel) {
 		effectiveBloomHack = 3;
 	} else if (PSP_CoreParameter().compat.flags().ForceLowerResolutionForEffectsOff) {
 		effectiveBloomHack = 0;
-	}
-
-	if (g_Config.bPatchBloomReduceLightGE2) {
-		const std::string discID = StripTrailingNull(g_paramSFO.GetDiscID());
-		if (IsGodEater2DiscID(discID)) {
-			effectiveBloomHack = std::max(effectiveBloomHack, 3);
-		}
 	}
 
 	bool newBuffered = !g_Config.bSkipBufferEffects;

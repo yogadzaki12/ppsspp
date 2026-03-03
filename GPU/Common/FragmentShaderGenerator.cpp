@@ -18,6 +18,7 @@
 #include <bitset>
 #include <cstdio>
 #include <sstream>
+#include <string_view>
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
@@ -26,6 +27,7 @@
 #include "Common/GPU/thin3d.h"
 #include "Core/Compatibility.h"
 #include "Core/Config.h"
+#include "Core/ELF/ParamSFO.h"
 #include "Core/System.h"
 #include "GPU/Common/GPUStateUtils.h"
 #include "GPU/Common/ShaderId.h"
@@ -48,6 +50,10 @@ static const SamplerDef samplersStereo[3] = {
 	{ 1, "fbotex", SamplerFlags::ARRAY_ON_VULKAN },
 	{ 2, "pal" },
 };
+
+static bool IsGodEater2DiscID(std::string_view discID) {
+	return discID == "ULJS00597" || discID == "NPJH50832" || discID == "ULJS19093";
+}
 
 bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString) {
 	*uniformMask = 0;
@@ -185,6 +191,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	bool needFragCoord = readFramebufferTex || gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT) && !forceDepthWritesOff;
+	const bool ge2BloomPatchEnabled = g_Config.bPatchBloomReduceLightGE2 &&
+		IsGodEater2DiscID(StripTrailingNull(g_paramSFO.GetDiscID())) &&
+		(ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN);
 	bool smoothedDepal = shaderDepalMode == ShaderDepalMode::SMOOTHED;
 	bool legacyReadFramebuffer = replaceBlend == REPLACE_BLEND_READ_FRAMEBUFFER || colorWriteMask;
 
@@ -1138,6 +1147,14 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (replaceBlend == REPLACE_BLEND_2X_ALPHA || replaceBlend == REPLACE_BLEND_PRE_SRC_2X_ALPHA) {
 			WRITE(p, "  v.a *= 2.0;\n");
 		}
+	}
+
+	if (ge2BloomPatchEnabled) {
+		WRITE(p, "  if (v_patchFlag != 0) {\n");
+		WRITE(p, "    float patchLuma = dot(v.rgb, vec3(0.2126, 0.7152, 0.0722));\n");
+		WRITE(p, "    float patchReduce = clamp((patchLuma - 0.55) * 0.65, 0.0, 0.45);\n");
+		WRITE(p, "    v.rgb *= (1.0 - patchReduce);\n");
+		WRITE(p, "  }\n");
 	}
 
 	char replacedAlpha[64] = "0.0";
