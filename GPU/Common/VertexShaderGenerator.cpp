@@ -351,7 +351,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "layout (location = 0) out highp vec3 v_texcoord;\n");
 
 		WRITE(p, "layout (location = 3) out highp float v_fogdepth;\n");
-		WRITE(p, "layout (location = 4) flat out lowp int v_patchFlag;\n");
+		WRITE(p, "layout (location = 4) flat out lowp int flag;\n");
 		WRITE(p, "layout (location = 5) out highp vec4 v_1;\n");
 		WRITE(p, "layout (location = 6) out highp vec4 v_2;\n");
 		WRITE(p, "layout (location = 7) out highp vec4 v_3;\n");
@@ -591,9 +591,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		}
 
 		if (patchShaderEnabled) {
-			const char *flatQual = compat.glslES30 ? "flat " : "";
 			WRITE(p, "//****** my_varying_vs *********\n");
-			WRITE(p, "%s %slowp int v_patchFlag;\n", compat.varying_vs, flatQual);
+			WRITE(p, "%s lowp flat int flag;\n", compat.varying_vs);
 			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
 			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_vs);
 			WRITE(p, "%s highp vec4 v_3;\n", compat.varying_vs);
@@ -1358,7 +1357,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	WRITE(p, "  %sgl_Position = outPos;\n", compat.vsOutPrefix);
 
 	if (patchShaderEnabled) {
-		WRITE(p, "  v_patchFlag = 0;\n");
+		WRITE(p, "  flag = 0;\n");
 		WRITE(p, "  v_1 = vec4(0.0);\n");
 		WRITE(p, "  v_2 = vec4(0.0);\n");
 		WRITE(p, "  v_3 = vec4(0.0);\n");
@@ -1370,7 +1369,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 		if (useHWTransform) {
 			WRITE(p, "  if (%uu == 0x2027410u) {\n", vertexFlagValue);
-			WRITE(p, "    v_patchFlag = 1;\n");
+			WRITE(p, "    flag = 1;\n");
 			WRITE(p, "    mat3 patchView;\n");
 			WRITE(p, "    patchView[0] = vec3(u_view[0].xyz);\n");
 			WRITE(p, "    patchView[1] = vec3(u_view[1].xyz);\n");
@@ -1384,7 +1383,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "    v_7 = vec4(normalize(patchView[1]), 1.0);\n");
 			WRITE(p, "    v_8 = vec4(normalize(patchView[2]), 1.0);\n");
 			WRITE(p, "  } else if (%uu == 0x2006410u) {\n", vertexFlagValue);
-			WRITE(p, "    v_patchFlag = 2;\n");
+			WRITE(p, "    flag = 2;\n");
 			WRITE(p, "    v_1 = vec4(worldnormal.xyz, 1.0);\n");
 			WRITE(p, "    v_2 = vec4(worldpos, 1.0);\n");
 			WRITE(p, "    v_6 = vec4(normalize(u_view[2].xyz), 1.0);\n");
