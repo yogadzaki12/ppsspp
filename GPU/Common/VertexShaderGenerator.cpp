@@ -167,8 +167,6 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 	bool isModeThrough = id.Bit(VS_BIT_IS_THROUGH);
 	bool lmode = id.Bit(VS_BIT_LMODE);
-	bool doTexture = id.Bit(VS_BIT_DO_TEXTURE);
-	bool enableFog = id.Bit(VS_BIT_ENABLE_FOG);
 
 	GETexMapMode uvGenMode = static_cast<GETexMapMode>(id.Bits(VS_BIT_UVGEN_MODE, 2));
 	bool doTextureTransform = uvGenMode == GE_TEXMAP_TEXTURE_MATRIX;
@@ -185,6 +183,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	bool hasColor = id.Bit(VS_BIT_HAS_COLOR) || !useHWTransform;
 	bool hasNormal = id.Bit(VS_BIT_HAS_NORMAL) && useHWTransform;
 	bool hasTexcoord = id.Bit(VS_BIT_HAS_TEXCOORD) || !useHWTransform;
+	bool doTexture = hasTexcoord;
+	bool enableFog = true;
 	bool flipNormal = id.Bit(VS_BIT_NORM_REVERSE);
 	int ls0 = id.Bits(VS_BIT_LS0, 2);
 	int ls1 = id.Bits(VS_BIT_LS1, 2);
