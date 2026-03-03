@@ -210,6 +210,14 @@ static bool UsingHardwareTextureScaling() {
 	return g_Config.bTexHardwareScaling && GetGPUBackend() == GPUBackend::VULKAN && !g_Config.bSoftwareRendering;
 }
 
+static bool IsGodEater2DiscID(std::string_view discID) {
+	return discID == "ULJS00597" || discID == "NPJH50832" || discID == "ULJS19093";
+}
+
+static bool IsCurrentGameGodEater2() {
+	return IsGodEater2DiscID(StripTrailingNull(g_paramSFO.GetDiscID()));
+}
+
 static std::string TextureTranslateName(std::string_view value) {
 	const TextureShaderInfo *info = GetTextureShaderInfo(value);
 	if (info) {
@@ -678,6 +686,13 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 		graphicsSettings->Add(new BitCheckBox(&g_Config.iShowStatusFlags, (int)ShowStatusFlags::BATTERY_PERCENT, gr->T("Show Battery %")));
 	}
 	AddOverlayList(graphicsSettings, screenManager());
+
+	graphicsSettings->Add(new ItemHeader(gr->T("Patch")));
+	auto ge2BloomPatch = graphicsSettings->Add(new CheckBox(&g_Config.bPatchBloomReduceLightGE2, gr->T("GE2 bloom reduction patch", "GE2 bloom reduction patch (object light reduction)")));
+	ge2BloomPatch->SetEnabledFunc([] {
+		return IsCurrentGameGodEater2();
+	});
+	graphicsSettings->Add(new SettingHint(gr->T("Only for God Eater 2 IDs: ULJS00597 / NPJH50832 / ULJS19093")));
 }
 
 void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {
