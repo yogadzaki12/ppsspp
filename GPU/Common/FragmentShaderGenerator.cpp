@@ -197,71 +197,69 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool smoothedDepal = shaderDepalMode == ShaderDepalMode::SMOOTHED;
 	bool legacyReadFramebuffer = replaceBlend == REPLACE_BLEND_READ_FRAMEBUFFER || colorWriteMask;
 
-	enum FragmentDebugFlag {
-		FDF_HIGHP_FOG = 0,
-		FDF_ENABLE_FRAGMENT_TEST_CACHE,
-		FDF_TEXTURE3D,
-		FDF_LMODE,
-		FDF_DO_TEXTURE,
-		FDF_ENABLE_FOG,
-		FDF_ENABLE_ALPHA_TEST,
-		FDF_ALPHA_TEST_AGAINST_ZERO,
-		FDF_TEST_FORCE_TO_ZERO,
-		FDF_ENABLE_COLOR_TEST,
-		FDF_COLOR_TEST_AGAINST_ZERO,
-		FDF_ENABLE_COLOR_DOUBLE,
-		FDF_DO_TEXTURE_PROJECTION,
-		FDF_USE_TEX_ALPHA,
-		FDF_FLAT_BUG,
-		FDF_DO_FLAT_SHADING,
-		FDF_SHADER_DEPAL,
-		FDF_SMOOTHED_DEPAL,
-		FDF_BGRA_TEXTURE,
-		FDF_COLOR_WRITE_MASK,
-		FDF_NEED_SHADER_TEX_CLAMP,
-		FDF_BLUE_TO_ALPHA,
-		FDF_IS_MODE_CLEAR,
-		FDF_DISCARD_STENCIL_WORKAROUND,
-		FDF_NEED_FRAMEBUFFER_READ,
-		FDF_READ_FRAMEBUFFER_TEX,
-		FDF_NEED_FRAG_COORD,
-		FDF_WRITE_DEPTH,
-		FDF_FETCH_FRAMEBUFFER,
+	enum BIT_FLAG {
+		_highpFog = 0,
+		_enableFragmentTestCache,
+		_texture3D,
+		_lmode,
+		_doTexture,
+		_enableFog,
+		_enableAlphaTest,
+		_alphaTestAgainstZero,
+		_testForceToZero,
+		_enableColorTest,
+		_colorTestAgainstZero,
+		_enableColorDoubling,
+		_doTextureProjection,
+		_doTextureAlpha,
+		_flatBug,
+		_doFlatShading,
+		_shaderDepal,
+		_smoothedDepal,
+		_bgraTexture,
+		_colorWriteMask,
+		_needShaderTexClamp,
+		_blueToAlpha,
+		_isModeClear,
+		_useDiscardStencilBugWorkaround,
+		_readFramebuffer,
+		_readFramebufferTex,
+		_needFragCoord,
+		_writeDepth,
 	};
 
-	std::bitset<28> fragmentDebugFlags;
-	fragmentDebugFlags.reset();
-	fragmentDebugFlags[FDF_HIGHP_FOG] = highpFog;
-	fragmentDebugFlags[FDF_ENABLE_FRAGMENT_TEST_CACHE] = enableFragmentTestCache;
-	fragmentDebugFlags[FDF_TEXTURE3D] = texture3D;
-	fragmentDebugFlags[FDF_LMODE] = lmode;
-	fragmentDebugFlags[FDF_DO_TEXTURE] = doTexture;
-	fragmentDebugFlags[FDF_ENABLE_FOG] = enableFog;
-	fragmentDebugFlags[FDF_ENABLE_ALPHA_TEST] = enableAlphaTest;
-	fragmentDebugFlags[FDF_ALPHA_TEST_AGAINST_ZERO] = alphaTestAgainstZero;
-	fragmentDebugFlags[FDF_TEST_FORCE_TO_ZERO] = testForceToZero;
-	fragmentDebugFlags[FDF_ENABLE_COLOR_TEST] = enableColorTest;
-	fragmentDebugFlags[FDF_COLOR_TEST_AGAINST_ZERO] = colorTestAgainstZero;
-	fragmentDebugFlags[FDF_ENABLE_COLOR_DOUBLE] = enableColorDouble;
-	fragmentDebugFlags[FDF_DO_TEXTURE_PROJECTION] = doTextureProjection;
-	fragmentDebugFlags[FDF_USE_TEX_ALPHA] = useTexAlpha;
-	fragmentDebugFlags[FDF_FLAT_BUG] = flatBug;
-	fragmentDebugFlags[FDF_DO_FLAT_SHADING] = doFlatShading;
-	fragmentDebugFlags[FDF_SHADER_DEPAL] = shaderDepalMode != ShaderDepalMode::OFF;
-	fragmentDebugFlags[FDF_SMOOTHED_DEPAL] = smoothedDepal;
-	fragmentDebugFlags[FDF_BGRA_TEXTURE] = bgraTexture;
-	fragmentDebugFlags[FDF_COLOR_WRITE_MASK] = colorWriteMask;
-	fragmentDebugFlags[FDF_NEED_SHADER_TEX_CLAMP] = needShaderTexClamp;
-	fragmentDebugFlags[FDF_BLUE_TO_ALPHA] = blueToAlpha;
-	fragmentDebugFlags[FDF_IS_MODE_CLEAR] = isModeClear;
-	fragmentDebugFlags[FDF_DISCARD_STENCIL_WORKAROUND] = useDiscardStencilBugWorkaround;
-	fragmentDebugFlags[FDF_NEED_FRAMEBUFFER_READ] = legacyReadFramebuffer;
-	fragmentDebugFlags[FDF_READ_FRAMEBUFFER_TEX] = readFramebufferTex;
-	fragmentDebugFlags[FDF_NEED_FRAG_COORD] = needFragCoord;
-	fragmentDebugFlags[FDF_WRITE_DEPTH] = writeDepth;
-	fragmentDebugFlags[FDF_FETCH_FRAMEBUFFER] = fetchFramebuffer;
-	const uint32_t fragmentFlagValue = (uint32_t)fragmentDebugFlags.to_ulong();
-	p.F("// flag_value: 0x%08x\n", fragmentFlagValue);
+	std::bitset<28> flag_bits;
+	flag_bits.reset();
+	flag_bits[_highpFog] = highpFog;
+	flag_bits[_enableFragmentTestCache] = enableFragmentTestCache;
+	flag_bits[_texture3D] = texture3D;
+	flag_bits[_lmode] = lmode;
+	flag_bits[_doTexture] = doTexture;
+	flag_bits[_enableFog] = enableFog;
+	flag_bits[_enableAlphaTest] = enableAlphaTest;
+	flag_bits[_alphaTestAgainstZero] = alphaTestAgainstZero;
+	flag_bits[_testForceToZero] = testForceToZero;
+	flag_bits[_enableColorTest] = enableColorTest;
+	flag_bits[_colorTestAgainstZero] = colorTestAgainstZero;
+	flag_bits[_enableColorDoubling] = enableColorDouble;
+	flag_bits[_doTextureProjection] = doTextureProjection;
+	flag_bits[_doTextureAlpha] = useTexAlpha;
+	flag_bits[_flatBug] = flatBug;
+	flag_bits[_doFlatShading] = doFlatShading;
+	flag_bits[_shaderDepal] = shaderDepalMode != ShaderDepalMode::OFF;
+	flag_bits[_smoothedDepal] = smoothedDepal;
+	flag_bits[_bgraTexture] = bgraTexture;
+	flag_bits[_colorWriteMask] = colorWriteMask;
+	flag_bits[_needShaderTexClamp] = needShaderTexClamp;
+	flag_bits[_blueToAlpha] = blueToAlpha;
+	flag_bits[_isModeClear] = isModeClear;
+	flag_bits[_useDiscardStencilBugWorkaround] = useDiscardStencilBugWorkaround;
+	flag_bits[_readFramebuffer] = legacyReadFramebuffer;
+	flag_bits[_readFramebufferTex] = readFramebufferTex;
+	flag_bits[_needFragCoord] = needFragCoord;
+	flag_bits[_writeDepth] = writeDepth;
+	const uint32_t flag_value = (uint32_t)flag_bits.to_ulong();
+	p.F("// flag_value: 0x%08x\n", flag_value);
 
 	// TODO: We could have a separate mechanism to support more ops using the shader blending mechanism,
 // on hardware that can do proper bit math in fragment shaders.
