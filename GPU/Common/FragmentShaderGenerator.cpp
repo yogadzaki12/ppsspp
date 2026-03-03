@@ -192,7 +192,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool needFragCoord = readFramebufferTex || gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT) && !forceDepthWritesOff;
 	const bool ge2BloomPatchEnabled = g_Config.bPatchBloomReduceLightGE2 &&
-		IsGodEater2DiscID(StripTrailingNull(g_paramSFO.GetDiscID())) &&
+		IsGodEater2DiscID(std::string_view(g_paramSFO.GetDiscID().c_str())) &&
 		(ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN);
 	bool smoothedDepal = shaderDepalMode == ShaderDepalMode::SMOOTHED;
 	bool legacyReadFramebuffer = replaceBlend == REPLACE_BLEND_READ_FRAMEBUFFER || colorWriteMask;

@@ -215,7 +215,7 @@ static bool IsGodEater2DiscID(std::string_view discID) {
 }
 
 static bool IsCurrentGameGodEater2() {
-	return IsGodEater2DiscID(StripTrailingNull(g_paramSFO.GetDiscID()));
+	return IsGodEater2DiscID(std::string_view(g_paramSFO.GetDiscID().c_str()));
 }
 
 static std::string TextureTranslateName(std::string_view value) {
