@@ -15,6 +15,8 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <bitset>
+
 #include "Common/StringUtils.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/GPU/ShaderWriter.h"
@@ -139,7 +141,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		}
 		bool useClamp = gstate_c.Use(GPU_USE_DEPTH_CLAMP) && !id.Bit(VS_BIT_IS_THROUGH);
 		if (gl_extensions.EXT_clip_cull_distance && (id.Bit(VS_BIT_VERTEX_RANGE_CULLING) || useClamp)) {
-			extensions.push_back("#extension GL_EXT_clip_cull_distance : enable");
+			extensions.push_back("#extension GL_EXT_clip_cull_distance : enable\n");
 		}
 		if (gl_extensions.APPLE_clip_distance && (id.Bit(VS_BIT_VERTEX_RANGE_CULLING) || useClamp)) {
 			extensions.push_back("#extension GL_APPLE_clip_distance : enable");
@@ -165,6 +167,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 	bool isModeThrough = id.Bit(VS_BIT_IS_THROUGH);
 	bool lmode = id.Bit(VS_BIT_LMODE);
+	bool doTexture = id.Bit(VS_BIT_DO_TEXTURE);
+	bool enableFog = id.Bit(VS_BIT_ENABLE_FOG);
 
 	GETexMapMode uvGenMode = static_cast<GETexMapMode>(id.Bits(VS_BIT_UVGEN_MODE, 2));
 	bool doTextureTransform = uvGenMode == GE_TEXMAP_TEXTURE_MATRIX;
@@ -240,6 +244,67 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	bool clipClampedDepth = !isModeThrough && gstate_c.Use(GPU_USE_DEPTH_CLAMP) && gstate_c.Use(GPU_USE_CLIP_DISTANCE);
 	const char *clipClampedDepthSuffix = "[0]";
 	const char *vertexRangeClipSuffix = clipClampedDepth ? "[1]" : "[0]";
+
+	enum VertexDebugFlag {
+		VDF_HIGHP_FOG = 0,
+		VDF_HIGHP_TEXCOORD,
+		VDF_IS_MODE_THROUGH,
+		VDF_LMODE,
+		VDF_DO_TEXTURE,
+		VDF_DO_TEXTURE_TRANSFORM,
+		VDF_DO_SHADE_MAPPING,
+		VDF_FLAT_BUG,
+		VDF_NEEDS_ZW_HACK,
+		VDF_DO_FLAT_SHADING,
+		VDF_USE_HW_TRANSFORM,
+		VDF_HAS_COLOR,
+		VDF_HAS_NORMAL,
+		VDF_HAS_TEXCOORD,
+		VDF_ENABLE_FOG,
+		VDF_FLIP_NORMAL,
+		VDF_ENABLE_BONES,
+		VDF_ENABLE_LIGHTING,
+		VDF_DO_BEZIER,
+		VDF_DO_SPLINE,
+		VDF_HAS_COLOR_TESS,
+		VDF_HAS_TEXCOORD_TESS,
+		VDF_HAS_NORMAL_TESS,
+		VDF_FLIP_NORMAL_TESS,
+		VDF_TEXCOORD_IN_VEC3,
+		VDF_VERTEX_RANGE_CULLING,
+	};
+
+	std::bitset<26> vertexDebugFlags;
+	vertexDebugFlags.reset();
+	vertexDebugFlags[VDF_HIGHP_FOG] = highpFog;
+	vertexDebugFlags[VDF_HIGHP_TEXCOORD] = highpTexcoord;
+	vertexDebugFlags[VDF_IS_MODE_THROUGH] = isModeThrough;
+	vertexDebugFlags[VDF_LMODE] = lmode;
+	vertexDebugFlags[VDF_DO_TEXTURE] = doTexture;
+	vertexDebugFlags[VDF_DO_TEXTURE_TRANSFORM] = doTextureTransform;
+	vertexDebugFlags[VDF_DO_SHADE_MAPPING] = doShadeMapping;
+	vertexDebugFlags[VDF_FLAT_BUG] = flatBug;
+	vertexDebugFlags[VDF_NEEDS_ZW_HACK] = needsZWHack;
+	vertexDebugFlags[VDF_DO_FLAT_SHADING] = doFlatShading;
+	vertexDebugFlags[VDF_USE_HW_TRANSFORM] = useHWTransform;
+	vertexDebugFlags[VDF_HAS_COLOR] = hasColor;
+	vertexDebugFlags[VDF_HAS_NORMAL] = hasNormal;
+	vertexDebugFlags[VDF_HAS_TEXCOORD] = hasTexcoord;
+	vertexDebugFlags[VDF_ENABLE_FOG] = enableFog;
+	vertexDebugFlags[VDF_FLIP_NORMAL] = flipNormal;
+	vertexDebugFlags[VDF_ENABLE_BONES] = enableBones;
+	vertexDebugFlags[VDF_ENABLE_LIGHTING] = enableLighting;
+	vertexDebugFlags[VDF_DO_BEZIER] = doBezier;
+	vertexDebugFlags[VDF_DO_SPLINE] = doSpline;
+	vertexDebugFlags[VDF_HAS_COLOR_TESS] = hasColorTess;
+	vertexDebugFlags[VDF_HAS_TEXCOORD_TESS] = hasTexcoordTess;
+	vertexDebugFlags[VDF_HAS_NORMAL_TESS] = hasNormalTess;
+	vertexDebugFlags[VDF_FLIP_NORMAL_TESS] = flipNormalTess;
+	vertexDebugFlags[VDF_TEXCOORD_IN_VEC3] = texCoordInVec3;
+	vertexDebugFlags[VDF_VERTEX_RANGE_CULLING] = vertexRangeCulling;
+	const uint32_t vertexFlagValue = (uint32_t)vertexDebugFlags.to_ulong();
+	bool isOpenGLShader = ShaderLanguageIsOpenGL(compat.shaderLanguage);
+	p.F("// flag_value: 0x%08x\n", vertexFlagValue);
 
 	if (compat.shaderLanguage == GLSL_VULKAN) {
 		WRITE(p, "\n");
@@ -514,6 +579,20 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "%s highp float v_fogdepth;\n", compat.varying_vs);
 		} else {
 			WRITE(p, "%s mediump float v_fogdepth;\n", compat.varying_vs);
+		}
+
+		if (isOpenGLShader) {
+			const char *flatQual = compat.glslES30 ? "flat " : "";
+			WRITE(p, "//****** my_varying_vs *********\n");
+			WRITE(p, "%s %slowp int v_patchFlag;\n", compat.varying_vs, flatQual);
+			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_3;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_4;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_5;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_6;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_7;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_8;\n", compat.varying_vs);
 		}
 	}
 
@@ -1269,6 +1348,35 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	// We've named the output gl_Position in HLSL as well.
 	WRITE(p, "  %sgl_Position = outPos;\n", compat.vsOutPrefix);
 
+	if (isOpenGLShader) {
+		WRITE(p, "  v_patchFlag = 0;\n");
+		WRITE(p, "  v_1 = vec4(0.0);\n");
+		WRITE(p, "  v_2 = vec4(0.0);\n");
+		WRITE(p, "  v_3 = vec4(0.0);\n");
+		WRITE(p, "  v_4 = vec4(0.0);\n");
+		WRITE(p, "  v_5 = vec4(0.0);\n");
+		WRITE(p, "  v_6 = vec4(0.0);\n");
+		WRITE(p, "  v_7 = vec4(0.0);\n");
+		WRITE(p, "  v_8 = vec4(0.0);\n");
+
+		if (useHWTransform) {
+			WRITE(p, "  if (%uu == 0x2027410u) {\n", vertexFlagValue);
+			WRITE(p, "    v_patchFlag = 1;\n");
+			WRITE(p, "    mat3 patchView;\n");
+			WRITE(p, "    patchView[0] = vec3(u_view[0].xyz);\n");
+			WRITE(p, "    patchView[1] = vec3(u_view[1].xyz);\n");
+			WRITE(p, "    patchView[2] = vec3(u_view[2].xyz);\n");
+			WRITE(p, "    v_1 = vec4(worldnormal.xyz, 1.0);\n");
+			WRITE(p, "    v_2 = vec4(worldpos, 1.0);\n");
+			WRITE(p, "    v_3 = vec4(normalize(vec3(0.0, 10000.0, 2000.0) * patchView), 1.0);\n");
+			WRITE(p, "    v_4 = vec4(normalize(vec3(0.0, 10000.0, -2000.0) * patchView), 1.0);\n");
+			WRITE(p, "    v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
+			WRITE(p, "  } else if (%uu == 0x2006410u) {\n", vertexFlagValue);
+			WRITE(p, "    v_patchFlag = 2;\n");
+			WRITE(p, "  }\n");
+		}
+	}
+
 	if (gstate_c.Use(GPU_USE_VIRTUAL_REALITY)) {
 		// Z correction for the depth buffer
 		if (useHWTransform) {
@@ -1290,5 +1398,34 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "  return Out;\n");
 	}
 	WRITE(p, "}\n");
+
+	WRITE(p, "\n");
+	if (highpFog) WRITE(p, "// highpFog 0\n");
+	if (highpTexcoord) WRITE(p, "// highpTexcoord 1\n");
+	if (isModeThrough) WRITE(p, "// isModeThrough 2\n");
+	if (lmode) WRITE(p, "// lmode 3\n");
+	if (doTexture) WRITE(p, "// doTexture 4\n");
+	if (doTextureTransform) WRITE(p, "// doTextureTransform 5\n");
+	if (doShadeMapping) WRITE(p, "// doShadeMapping 6\n");
+	if (flatBug) WRITE(p, "// flatBug 7\n");
+	if (needsZWHack) WRITE(p, "// needsZWHack 8\n");
+	if (doFlatShading) WRITE(p, "// doFlatShading 9\n");
+	if (useHWTransform) WRITE(p, "// useHWTransform 10\n");
+	if (hasColor) WRITE(p, "// hasColor 11\n");
+	if (hasNormal) WRITE(p, "// hasNormal 12\n");
+	if (hasTexcoord) WRITE(p, "// hasTexcoord 13\n");
+	if (enableFog) WRITE(p, "// enableFog 14\n");
+	if (flipNormal) WRITE(p, "// flipNormal 15\n");
+	if (enableBones) WRITE(p, "// enableBones 16\n");
+	if (enableLighting) WRITE(p, "// enableLighting 17\n");
+	if (doBezier) WRITE(p, "// doBezier 18\n");
+	if (doSpline) WRITE(p, "// doSpline 19\n");
+	if (hasColorTess) WRITE(p, "// hasColorTess 20\n");
+	if (hasTexcoordTess) WRITE(p, "// hasTexcoordTess 21\n");
+	if (hasNormalTess) WRITE(p, "// hasNormalTess 22\n");
+	if (flipNormalTess) WRITE(p, "// flipNormalTess 23\n");
+	if (texCoordInVec3) WRITE(p, "// texCoordInVec3 24\n");
+	if (vertexRangeCulling) WRITE(p, "// vertexRangeCulling 25\n");
+	WRITE(p, "// flag_value: 0x%08x\n", vertexFlagValue);
 	return true;
 }

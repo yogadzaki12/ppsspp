@@ -15,6 +15,7 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <bitset>
 #include <cstdio>
 #include <sstream>
 
@@ -184,6 +185,74 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	bool needFragCoord = readFramebufferTex || gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT) && !forceDepthWritesOff;
+	bool smoothedDepal = shaderDepalMode == ShaderDepalMode::SMOOTHED;
+	bool legacyReadFramebuffer = replaceBlend == REPLACE_BLEND_READ_FRAMEBUFFER || colorWriteMask;
+
+	enum FragmentDebugFlag {
+		FDF_HIGHP_FOG = 0,
+		FDF_ENABLE_FRAGMENT_TEST_CACHE,
+		FDF_TEXTURE3D,
+		FDF_LMODE,
+		FDF_DO_TEXTURE,
+		FDF_ENABLE_FOG,
+		FDF_ENABLE_ALPHA_TEST,
+		FDF_ALPHA_TEST_AGAINST_ZERO,
+		FDF_TEST_FORCE_TO_ZERO,
+		FDF_ENABLE_COLOR_TEST,
+		FDF_COLOR_TEST_AGAINST_ZERO,
+		FDF_ENABLE_COLOR_DOUBLE,
+		FDF_DO_TEXTURE_PROJECTION,
+		FDF_USE_TEX_ALPHA,
+		FDF_FLAT_BUG,
+		FDF_DO_FLAT_SHADING,
+		FDF_SHADER_DEPAL,
+		FDF_SMOOTHED_DEPAL,
+		FDF_BGRA_TEXTURE,
+		FDF_COLOR_WRITE_MASK,
+		FDF_NEED_SHADER_TEX_CLAMP,
+		FDF_BLUE_TO_ALPHA,
+		FDF_IS_MODE_CLEAR,
+		FDF_DISCARD_STENCIL_WORKAROUND,
+		FDF_NEED_FRAMEBUFFER_READ,
+		FDF_READ_FRAMEBUFFER_TEX,
+		FDF_NEED_FRAG_COORD,
+		FDF_WRITE_DEPTH,
+		FDF_FETCH_FRAMEBUFFER,
+	};
+
+	std::bitset<28> fragmentDebugFlags;
+	fragmentDebugFlags.reset();
+	fragmentDebugFlags[FDF_HIGHP_FOG] = highpFog;
+	fragmentDebugFlags[FDF_ENABLE_FRAGMENT_TEST_CACHE] = enableFragmentTestCache;
+	fragmentDebugFlags[FDF_TEXTURE3D] = texture3D;
+	fragmentDebugFlags[FDF_LMODE] = lmode;
+	fragmentDebugFlags[FDF_DO_TEXTURE] = doTexture;
+	fragmentDebugFlags[FDF_ENABLE_FOG] = enableFog;
+	fragmentDebugFlags[FDF_ENABLE_ALPHA_TEST] = enableAlphaTest;
+	fragmentDebugFlags[FDF_ALPHA_TEST_AGAINST_ZERO] = alphaTestAgainstZero;
+	fragmentDebugFlags[FDF_TEST_FORCE_TO_ZERO] = testForceToZero;
+	fragmentDebugFlags[FDF_ENABLE_COLOR_TEST] = enableColorTest;
+	fragmentDebugFlags[FDF_COLOR_TEST_AGAINST_ZERO] = colorTestAgainstZero;
+	fragmentDebugFlags[FDF_ENABLE_COLOR_DOUBLE] = enableColorDouble;
+	fragmentDebugFlags[FDF_DO_TEXTURE_PROJECTION] = doTextureProjection;
+	fragmentDebugFlags[FDF_USE_TEX_ALPHA] = useTexAlpha;
+	fragmentDebugFlags[FDF_FLAT_BUG] = flatBug;
+	fragmentDebugFlags[FDF_DO_FLAT_SHADING] = doFlatShading;
+	fragmentDebugFlags[FDF_SHADER_DEPAL] = shaderDepalMode != ShaderDepalMode::OFF;
+	fragmentDebugFlags[FDF_SMOOTHED_DEPAL] = smoothedDepal;
+	fragmentDebugFlags[FDF_BGRA_TEXTURE] = bgraTexture;
+	fragmentDebugFlags[FDF_COLOR_WRITE_MASK] = colorWriteMask;
+	fragmentDebugFlags[FDF_NEED_SHADER_TEX_CLAMP] = needShaderTexClamp;
+	fragmentDebugFlags[FDF_BLUE_TO_ALPHA] = blueToAlpha;
+	fragmentDebugFlags[FDF_IS_MODE_CLEAR] = isModeClear;
+	fragmentDebugFlags[FDF_DISCARD_STENCIL_WORKAROUND] = useDiscardStencilBugWorkaround;
+	fragmentDebugFlags[FDF_NEED_FRAMEBUFFER_READ] = legacyReadFramebuffer;
+	fragmentDebugFlags[FDF_READ_FRAMEBUFFER_TEX] = readFramebufferTex;
+	fragmentDebugFlags[FDF_NEED_FRAG_COORD] = needFragCoord;
+	fragmentDebugFlags[FDF_WRITE_DEPTH] = writeDepth;
+	fragmentDebugFlags[FDF_FETCH_FRAMEBUFFER] = fetchFramebuffer;
+	const uint32_t fragmentFlagValue = (uint32_t)fragmentDebugFlags.to_ulong();
+	p.F("// flag_value: 0x%08x\n", fragmentFlagValue);
 
 	// TODO: We could have a separate mechanism to support more ops using the shader blending mechanism,
 // on hardware that can do proper bit math in fragment shaders.
@@ -403,6 +472,18 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		WRITE(p, "%s %s float v_fogdepth;\n", compat.varying_fs, highpFog ? "highp" : "mediump");
 		if (doTexture) {
 			WRITE(p, "%s %s vec3 v_texcoord;\n", compat.varying_fs, highpTexcoord ? "highp" : "mediump");
+		}
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			const char *flatQual = compat.glslES30 ? "flat " : "";
+			WRITE(p, "%s %slowp int v_patchFlag;\n", compat.varying_fs, flatQual);
+			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_fs);
+			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_fs);
+			WRITE(p, "%s highp vec4 v_3;\n", compat.varying_fs);
+			WRITE(p, "%s highp vec4 v_4;\n", compat.varying_fs);
+			WRITE(p, "%s highp vec4 v_5;\n", compat.varying_fs);
+			WRITE(p, "%s highp vec4 v_6;\n", compat.varying_fs);
+			WRITE(p, "%s highp vec4 v_7;\n", compat.varying_fs);
+			WRITE(p, "%s highp vec4 v_8;\n", compat.varying_fs);
 		}
 
 		if (!enableFragmentTestCache) {
