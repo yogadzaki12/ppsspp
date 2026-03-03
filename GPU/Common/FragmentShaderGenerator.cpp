@@ -17,6 +17,8 @@
 
 #include <cstdio>
 #include <sstream>
+#include <bitset>
+#include <fstream>
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
@@ -35,6 +37,9 @@
 #include "GPU/GPUState.h"
 
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+
+#define __FRAGMENT_GLSL_FILE__
+#define NORMAL_TEXTURE
 
 static const SamplerDef samplersMono[3] = {
 	{ 0, "tex" },
@@ -184,6 +189,77 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	bool needFragCoord = readFramebufferTex || gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT) && !forceDepthWritesOff;
+	bool is_opengles = false;
+
+	enum BIT_FLAG {
+		_highpFog = 0,
+		_enableFragmentTestCache,
+		_texture3D,
+		_lmode,
+		_doTexture,
+		_enableFog,
+		_enableAlphaTest,
+		_alphaTestAgainstZero,
+		_testForceToZero,
+		_enableColorTest,
+		_colorTestAgainstZero,
+		_enableColorDoubling,
+		_doTextureProjection,
+		_doTextureAlpha,
+		_flatBug,
+		_doFlatShading,
+		_shaderDepal,
+		_smoothedDepal,
+		_bgraTexture,
+		_colorWriteMask,
+		_needShaderTexClamp,
+		_blueToAlpha,
+		_isModeClear,
+		_useDiscardStencilBugWorkaround,
+		_readFramebuffer,
+		_readFramebufferTex,
+		_needFragCoord,
+		_writeDepth,
+	};
+	unsigned long flag_value = 0;
+	std::bitset<28> flag;
+	flag.reset();
+	flag[_highpFog] = highpFog;
+	flag[_enableFragmentTestCache] = enableFragmentTestCache;
+	flag[_texture3D] = texture3D;
+	flag[_lmode] = lmode;
+	flag[_doTexture] = doTexture;
+	flag[_enableFog] = enableFog;
+	flag[_enableAlphaTest] = enableAlphaTest;
+	flag[_alphaTestAgainstZero] = alphaTestAgainstZero;
+	flag[_testForceToZero] = testForceToZero;
+	flag[_enableColorTest] = enableColorTest;
+	flag[_colorTestAgainstZero] = colorTestAgainstZero;
+	flag[_enableColorDoubling] = enableColorDouble;
+	flag[_doTextureProjection] = doTextureProjection;
+	flag[_doTextureAlpha] = useTexAlpha;
+	flag[_flatBug] = flatBug;
+	flag[_doFlatShading] = doFlatShading;
+	flag[_shaderDepal] = shaderDepalMode != ShaderDepalMode::OFF;
+	flag[_smoothedDepal] = shaderDepalMode == ShaderDepalMode::SMOOTHED;
+	flag[_bgraTexture] = bgraTexture;
+	flag[_colorWriteMask] = colorWriteMask;
+	flag[_needShaderTexClamp] = needShaderTexClamp;
+	flag[_blueToAlpha] = blueToAlpha;
+	flag[_isModeClear] = isModeClear;
+	flag[_useDiscardStencilBugWorkaround] = useDiscardStencilBugWorkaround;
+	flag[_readFramebuffer] = needFramebufferRead;
+	flag[_readFramebufferTex] = readFramebufferTex;
+	flag[_needFragCoord] = needFragCoord;
+	flag[_writeDepth] = writeDepth;
+	flag_value = flag.to_ulong();
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	char file_name[128] = {0};
+	sprintf(file_name, "Fragment_0x%x.glsl", flag_value);
+	std::string out_name = file_name;
+	std::string dir_path = "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/glsl";
+#endif
 
 	// TODO: We could have a separate mechanism to support more ops using the shader blending mechanism,
 // on hardware that can do proper bit math in fragment shaders.
@@ -494,6 +570,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "  float gl_FragDepth;\n");
 		}
 	} else {
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			is_opengles = true;
+		}
 		WRITE(p, "void main() {\n");
 	}
 
@@ -1096,8 +1175,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		break;
 
 	case REPLACE_ALPHA_NO:
-		WRITE(p, "  %s = v;\n", compat.fragColor0);
-		break;
+            WRITE(p, "  %s = v;\n", compat.fragColor0);
+            break;
 
 	default:
 		*errorString = "Bad stencil-to-alpha type, corrupt ID?";
@@ -1194,6 +1273,65 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	}
 
 	WRITE(p, "}\n");
+
+	WRITE(p,"\n");
+	WRITE(p,"\n");
+	if(highpFog) WRITE(p,"//    highpFog 0\n");
+	if( enableFragmentTestCache  ) WRITE(p,"// enableFragmentTestCache 1\n");
+	if( texture3D  ) WRITE(p,"// texture3D 2\n");
+	if( lmode  ) WRITE(p,"// lmode 3\n");
+	if( doTexture  ) WRITE(p,"// doTexture  4\n ");
+	if(  enableFog ) WRITE(p,"// enableFog  5\n");
+	if( enableAlphaTest  ) WRITE(p,"// enableAlphaTest   6\n");
+	if(  alphaTestAgainstZero ) WRITE(p,"// alphaTestAgainstZero    7\n");
+	if( testForceToZero  ) WRITE(p,"//  testForceToZero   8\n");
+	if( enableColorTest  ) WRITE(p,"// enableColorTest   9\n");
+	if(  colorTestAgainstZero ) WRITE(p,"// colorTestAgainstZero   10\n ");
+	if( enableColorDouble  ) WRITE(p,"// enableColorDoubling    11\n");
+	if( doTextureProjection  ) WRITE(p,"// doTextureProjection    12\n");
+	if( useTexAlpha) WRITE(p,"// doTextureAlpha    13\n");
+	if( flatBug  ) WRITE(p,"// flatBug    14  \n");
+	if(  doFlatShading ) WRITE(p,"// doFlatShading  15 \n");
+	if( shaderDepalMode != ShaderDepalMode::OFF  ) WRITE(p,"// shaderDepal    16\n");
+	if( shaderDepalMode == ShaderDepalMode::SMOOTHED  ) WRITE(p,"// smoothedDepal    17\n");
+	if( bgraTexture  ) WRITE(p,"// bgraTexture    18\n");
+	if( colorWriteMask  ) WRITE(p,"// colorWriteMask    19\n");
+	if(  needShaderTexClamp ) WRITE(p,"// needShaderTexClamp     20\n");
+	if( blueToAlpha  ) WRITE(p,"// blueToAlpha     21\n");
+	if( isModeClear  ) WRITE(p,"// isModeClear    22\n");
+	if(  useDiscardStencilBugWorkaround ) WRITE(p,"// useDiscardStencilBugWorkaround     23\n");
+	if(  needFramebufferRead ) WRITE(p,"// readFramebuffer    24\n");
+	if( readFramebufferTex  ) WRITE(p,"// readFramebufferTex     25\n");
+	if(  needFragCoord ) WRITE(p,"// needFragCoord     26\n");
+	if( writeDepth  ) WRITE(p,"// writeDepth    27\n");
+	if(  hasPackUnorm4x8 ) WRITE(p,"// hasPackUnorm4x8    28\n\n ");
+	WRITE(p, "//flag_value = 0x%x \n",flag_value);
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	if(is_opengles) {
+		std::ifstream glsl_in(dir_path + "/" + out_name);
+		if (glsl_in.is_open()) {
+			memset(buffer, 0x20, 16384);
+			int file_size = 0;
+			glsl_in.seekg(0, glsl_in.end);
+			file_size = glsl_in.tellg();
+			glsl_in.seekg(0, glsl_in.beg);
+			char *new_code = new char[file_size];
+			memset(new_code, 0x00, file_size);
+			glsl_in.read(new_code, file_size);
+			WRITE(p, new_code);
+			delete[]new_code;
+			glsl_in.close();
+
+		} else {
+			std::ofstream glsl_out(dir_path + "/" + out_name);
+			if (glsl_out.is_open()) {
+				glsl_out.write( buffer , 16384 );
+				glsl_out.close();
+			}
+		}
+	}
+#endif
 
 	return true;
 }

@@ -28,9 +28,20 @@
 #include "GPU/Common/VertexShaderGenerator.h"
 #include "GPU/Vulkan/DrawEngineVulkan.h"
 
+
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+#include <bitset>
+#include <fstream>
+
+#define __VERTEXT_GLSL_FILE__
+
 #undef WRITE
 
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+
+
 
 static const char * const boneWeightAttrDecl[9] = {
 	"#ERROR#",
@@ -241,7 +252,110 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	const char *clipClampedDepthSuffix = "[0]";
 	const char *vertexRangeClipSuffix = clipClampedDepth ? "[1]" : "[0]";
 
-	if (compat.shaderLanguage == GLSL_VULKAN) {
+
+
+    enum flag_name{
+        _highpFog = 0,
+        _highpTexcoord  ,
+        _isModeThrough ,
+        _lmode  ,
+        _doTexture,
+        _doTextureTransform  ,
+        _doShadeMapping  ,
+        _flatBug ,
+        _needsZWHack  ,
+        _doFlatShading ,
+        _useHWTransform  ,
+        _hasColor ,
+        _hasNormal  ,
+        _hasTexcoord  ,
+        _enableFog ,
+        _flipNormal ,
+        _enableBones ,
+        _enableLighting ,
+        _doBezier  ,
+        _doSpline  ,
+        _hasColorTess  ,
+        _hasTexcoordTess  ,
+        _hasNormalTess ,
+        _flipNormalTess ,
+        _texCoordInVec3  ,
+        _vertexRangeCulling
+
+    };
+
+    std::bitset<26> flag_bits;
+    flag_bits.reset();
+    flag_bits[_highpFog] = highpFog;
+    flag_bits[_highpTexcoord] = highpTexcoord;
+    flag_bits[_isModeThrough] = isModeThrough;
+    flag_bits[_lmode] = lmode;
+    flag_bits[_doTexture] = doTexture;
+    flag_bits[_doTextureTransform] = doTextureTransform;
+    flag_bits[_doShadeMapping] = doShadeMapping;
+    flag_bits[_flatBug] = flatBug;
+    flag_bits[_needsZWHack] = needsZWHack;
+    flag_bits[_doFlatShading] = doFlatShading;
+    flag_bits[_useHWTransform] = useHWTransform;
+    flag_bits[_hasColor] = hasColor;
+    flag_bits[_hasNormal] = hasNormal;
+    flag_bits[_hasTexcoord] = hasTexcoord;
+    flag_bits[_enableFog] = enableFog;
+    flag_bits[_flipNormal] = flipNormal;
+    flag_bits[_enableBones] = enableBones;
+    flag_bits[_enableLighting] = enableLighting;
+    flag_bits[_doBezier] = doBezier;
+    flag_bits[_doSpline] = doSpline;
+    flag_bits[_hasColorTess] = hasColorTess;
+    flag_bits[_hasTexcoordTess] = hasTexcoordTess;
+    flag_bits[_hasNormalTess] = hasNormalTess;
+    flag_bits[_flipNormalTess] = flipNormalTess;
+    flag_bits[_texCoordInVec3] = texCoordInVec3;
+    flag_bits[_vertexRangeCulling] = vertexRangeCulling;
+    unsigned long flag_value = flag_bits.to_ulong();
+    bool is_opengles = false;
+
+#ifdef __VERTEXT_GLSL_FILE__
+    std::string dir_path = "/storage/emulated/0/Android/data/org.ppsspp.ppsspp/files/glsl";
+    char file_name[128]={0};
+    sprintf(file_name,"Vertex_0x%x.glsl",flag_value);
+    std::string out_name = file_name;
+#endif
+
+
+/*
+    std::string json_path = dir_path + "/" + std::string(file_name)+".varying.json" ;
+    std::ifstream vs_out_json_ifs(json_path );
+    char* json_code = nullptr ;
+    int file_size = 0;
+    bool ParseOK = false;
+    if(vs_out_json_ifs.is_open()) {
+        vs_out_json_ifs.seekg(0,vs_out_json_ifs.end);
+        file_size = vs_out_json_ifs.tellg();
+        vs_out_json_ifs.seekg(0,vs_out_json_ifs.beg);
+        json_code = new char[file_size];
+        memset(json_code,0x00,file_size);
+        vs_out_json_ifs.read(json_code,file_size);
+        delete [] json_code;
+        vs_out_json_ifs.close();
+    }else{
+        std::ofstream json_gen(json_path  );
+        if(json_gen.is_open())
+            json_gen.close();
+    }
+
+    rapidjson::Document d;
+
+    if(json_code){
+        if(!d.Parse(json_code).HasParseError()) {
+            if (d.IsObject()) ParseOK = true;
+        }
+    }
+*/
+
+
+
+    if (compat.shaderLanguage == GLSL_VULKAN) {
 		WRITE(p, "\n");
 
 		WRITE(p, "layout (std140, set = 0, binding = %d) uniform baseVars {\n%s};\n", DRAW_BINDING_DYNUBO_BASE, ub_baseStr);
@@ -488,6 +602,15 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "uniform lowp float u_scaleY;\n");
 		}
 
+
+
+
+
+#ifdef OPENXR
+		WRITE(p, "uniform lowp float u_scaleX;\n");
+		WRITE(p, "uniform lowp float u_scaleY;\n");
+#endif
+
 		if (useHWTransform || !hasColor) {
 			WRITE(p, "uniform lowp vec4 u_matambientalpha;\n");  // matambient + matalpha
 			*uniformMask |= DIRTY_MATAMBIENTALPHA;
@@ -686,6 +809,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "}\n");
 	}
 
+
 	if (useHWTransform) {
 		WRITE(p, "vec3 normalizeOr001(vec3 v) {\n");
 		WRITE(p, "   return length(v) == 0.0 ? vec3(0.0, 0.0, 1.0) : normalize(v);\n");
@@ -693,6 +817,24 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == GLSL_VULKAN) {
+
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			is_opengles = true;
+
+			WRITE(p, "//****** my_varying_vs *********\n");
+			WRITE(p, "%s lowp flat int flag;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_3;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_4;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_5;\n", compat.varying_vs);
+#ifdef __VERTEXT_GLSL_FILE__
+			WRITE(p, "%s highp vec4 v_6;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_7;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_8;\n", compat.varying_vs);
+#endif
+		}
+
 		WRITE(p, "void main() {\n");
 	} else if (compat.shaderLanguage == HLSL_D3D11) {
 		WRITE(p, "VS_OUT main(VS_IN In) {\n");
@@ -725,6 +867,10 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "%s", boneWeightAttrInitHLSL[numBoneWeights]);
 		}
 	}
+
+
+
+
 
 	if (!useHWTransform) {
 		// Simple pass-through of vertex data to fragment shader
@@ -889,6 +1035,13 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		bool specularIsZero = true;
 		bool distanceNeeded = false;
 		bool anySpots = false;
+
+
+
+
+
+
+
 		if (enableLighting) {
 
 			p.C("  lowp vec4 lightSum0 = u_ambient * ambientColor + vec4(u_matemissive, 0.0);\n");
@@ -1072,6 +1225,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			}
 		}
 
+
 		if (enableLighting) {
 			// Sum up ambient, emissive here.
 			if (lmode) {
@@ -1226,6 +1380,11 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "  }\n");
 	}
 
+
+
+
+
+
 	if (vertexRangeCulling) {
 		WRITE(p, "  vec3 projPos = outPos.xyz / outPos.w;\n");
 		WRITE(p, "  float projZ = (projPos.z - u_depthRange.z) * u_depthRange.w;\n");
@@ -1289,6 +1448,62 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if (compat.shaderLanguage == HLSL_D3D11) {
 		WRITE(p, "  return Out;\n");
 	}
+
 	WRITE(p, "}\n");
+
+	WRITE(p,"\n");
+	WRITE(p,"\n");
+	if(highpFog) WRITE(p,"//    highpFog  0 \n");
+	if( highpTexcoord  ) WRITE(p,"// highpTexcoord   1 \n");
+	if( isModeThrough  ) WRITE(p,"//  isModeThrough  2 \n");
+	if( lmode  ) WRITE(p,"//lmode    3 \n");
+	if(  doTexture ) WRITE(p,"//  doTexture  4 \n");
+	if( doTextureTransform  ) WRITE(p,"// doTextureTransform  5  \n");
+	if( doShadeMapping  ) WRITE(p,"// doShadeMapping   6 \n");
+	if( flatBug  ) WRITE(p,"// flatBug   7 \n");
+	if( needsZWHack  ) WRITE(p,"// needsZWHack    8\n");
+	if( doFlatShading  ) WRITE(p,"//doFlatShading    9 \n");
+	if( useHWTransform  ) WRITE(p,"// useHWTransform   10 \n");
+	if( hasColor  ) WRITE(p,"// hasColor   11 \n");
+	if( hasNormal  ) WRITE(p,"//hasNormal    12 \n");
+	if( hasTexcoord  ) WRITE(p,"// hasTexcoord   13 \n");
+	if(  enableFog ) WRITE(p,"//  enableFog  14 \n");
+	if( flipNormal  ) WRITE(p,"// flipNormal   15 \n");
+	if( enableBones  ) WRITE(p,"// enableBones   16 \n");
+	if( enableLighting  ) WRITE(p,"// enableLighting   17 \n");
+	if( doBezier  ) WRITE(p,"//  doBezier  18 \n");
+	if( doSpline  ) WRITE(p,"//doSpline    19 \n");
+	if( hasColorTess  ) WRITE(p,"// hasColorTess   20 \n");
+	if( hasTexcoordTess  ) WRITE(p,"// hasTexcoordTess  21  \n");
+	if( hasNormalTess  ) WRITE(p,"// hasNormalTess   22 \n");
+	if( flipNormalTess  ) WRITE(p,"// flipNormalTess   23 \n");
+	if( texCoordInVec3  ) WRITE(p,"//  texCoordInVec3  24 \n");
+	if( vertexRangeCulling  ) WRITE(p,"// vertexRangeCulling   25 \n");
+	WRITE(p,"//flag_value: 0x%x \n",flag_value);
+#ifdef __VERTEXT_GLSL_FILE__
+	if(is_opengles) {
+		std::ifstream glsl_in(dir_path + "/" + out_name);
+		if (glsl_in.is_open()) {
+			memset(buffer, 0x20, 16384);
+			int file_size = 0;
+			glsl_in.seekg(0, glsl_in.end);
+			file_size = glsl_in.tellg();
+			glsl_in.seekg(0, glsl_in.beg);
+			char *new_code = new char[file_size];
+			memset(new_code, 0x00, file_size);
+			glsl_in.read(new_code, file_size);
+			WRITE(p, new_code);
+			delete[]new_code;
+			glsl_in.close();
+
+		} else {
+			std::ofstream glsl_out(dir_path + "/" + out_name);
+			if (glsl_out.is_open()) {
+				glsl_out.write( buffer , 16384 ) ;
+				glsl_out.close();
+			}
+		}
+	}
+#endif
 	return true;
 }
