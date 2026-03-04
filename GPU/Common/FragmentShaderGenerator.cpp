@@ -159,6 +159,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		shading = doFlatShading ? "flat" : "";
 	}
 
+	const u32 vertType = gstate.vertType & 0x00FFFFFF;
+	const bool ge2ReduceLightHack = ShaderLanguageIsOpenGL(compat.shaderLanguage) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight && (vertType == 0x32 || vertType == 0x2032);
+
 	bool forceDepthWritesOff = id.Bit(FS_BIT_DEPTH_TEST_NEVER);
 
 	bool useDiscardStencilBugWorkaround = id.Bit(FS_BIT_NO_DEPTH_CANNOT_DISCARD_STENCIL) && !forceDepthWritesOff;
@@ -403,6 +406,17 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		WRITE(p, "%s %s float v_fogdepth;\n", compat.varying_fs, highpFog ? "highp" : "mediump");
 		if (doTexture) {
 			WRITE(p, "%s %s vec3 v_texcoord;\n", compat.varying_fs, highpTexcoord ? "highp" : "mediump");
+		}
+		if (ge2ReduceLightHack) {
+			WRITE(p, "%s %s lowp float flag;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_1;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_2;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_3;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_4;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_5;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_6;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_7;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_8;\n", shading, compat.varying_fs);
 		}
 
 		if (!enableFragmentTestCache) {
@@ -841,6 +855,12 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (enableFog) {
 			WRITE(p, "  float fogCoef = clamp(v_fogdepth, 0.0, 1.0);\n");
 			WRITE(p, "  v = mix(vec4(u_fogcolor, v.a), v, fogCoef);\n");
+		}
+
+		if (ge2ReduceLightHack) {
+			WRITE(p, "  float ge2Lum = dot(v.rgb, vec3(0.2126, 0.7152, 0.0722));\n");
+			WRITE(p, "  float ge2Reduce = smoothstep(0.45, 1.0, ge2Lum) * 0.28;\n");
+			WRITE(p, "  v.rgb *= (1.0 - ge2Reduce);\n");
 		}
 
 		// Texture access is at half texels [0.5/256, 255.5/256], but colors are normalized [0, 255].

@@ -77,6 +77,7 @@ struct CompatFlags {
 	bool MemstickFixedFree;
 	bool DateLimited;
 	bool ShaderColorBitmask;
+	bool GodEater2ReduceLight;
 	bool DisableFirstFrameReadback;
 	bool MpegAvcWarmUp;
 	bool BlueToAlpha;
