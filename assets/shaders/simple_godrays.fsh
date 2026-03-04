@@ -1,4 +1,5 @@
-// Ported from Shadertoy 4tfSRn: "simple godrays in screenspace" by public_int_i.
+// Ported and adapted from Shadertoy 4tfSRn: "simple godrays in screenspace" by public_int_i.
+// This version applies as a PPSSPP post-processing shader on top of the game frame.
 
 #ifdef GL_ES
 precision mediump float;
@@ -7,61 +8,58 @@ precision mediump int;
 
 uniform sampler2D sampler0;
 varying vec2 v_texcoord0;
-uniform vec4 u_time;
 uniform vec4 u_setting;
 
 const vec2 SUN_POS = vec2(0.5, 0.5);
 const vec3 SUN_COLOR = vec3(1.0, 0.95, 0.95);
-const vec3 BACKGROUND_COLOR = vec3(0.0);
 const int GODRAY_ITER = 32;
+const float GODRAY_DECAY = 0.96;
 
-float occlusionMap(vec2 uv, vec2 occlusionSize) {
-    vec2 occlusionLoc = vec2(sin(u_time.x * 0.6) * 0.2 + 0.5, cos(u_time.x * 0.76) * 0.2 + 0.5);
-    float d = length(max(abs(uv - occlusionLoc) - occlusionSize, vec2(0.0)));
-    d = max(-(length(mod(uv - occlusionLoc, occlusionSize * 0.5) - occlusionSize * 0.25) - occlusionSize.x * 0.5), d);
-    return floor(1.03 - d);
+float luminance(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
 void main() {
     vec2 uv = v_texcoord0.xy;
+    vec3 baseColor = texture2D(sampler0, uv).rgb;
 
-    float sunSize = max(0.02, u_setting.y);
+    float sunSize = max(0.01, u_setting.y);
     float godrayReach = max(sunSize + 0.01, u_setting.z);
     float godrayIntensity = max(0.0, u_setting.x);
-    vec2 occlusionSize = vec2(max(0.01, u_setting.w));
-    float godrayStep = (sunSize * 0.5) / float(GODRAY_ITER);
+    float threshold = clamp(u_setting.w, 0.0, 1.0);
 
-    float cl = occlusionMap(uv, occlusionSize);
     vec2 sunDir = SUN_POS - uv;
     float sunLen = length(sunDir);
-
-    if (sunLen < sunSize) {
-        gl_FragColor = vec4(mix(SUN_COLOR, vec3(cl * 0.3), cl), 1.0);
-        return;
-    }
-
-    vec3 c = mix(BACKGROUND_COLOR, vec3(cl * 0.3), cl);
-    cl = 0.0;
+    vec3 color = baseColor;
 
     if (sunLen < godrayReach) {
         sunDir = normalize(sunDir);
-        uv += sunDir * max(0.0, (sunLen - sunSize));
-        sunLen = 1.0 - sunLen / godrayReach;
-        int maxIter = int(sunLen * float(GODRAY_ITER));
+        float reachFactor = 1.0 - sunLen / godrayReach;
+        float godrayStep = (godrayReach * 0.5) / float(GODRAY_ITER);
+        vec2 sampleUV = uv + sunDir * max(0.0, sunLen - sunSize);
+        float cl = 0.0;
+        float weight = 1.0;
+        int maxIter = int(reachFactor * float(GODRAY_ITER));
 
         for (int i = 0; i < GODRAY_ITER; i++) {
-            cl += max(0.0, 1.0 - occlusionMap(uv, occlusionSize)) * sunLen;
-
             if (i > maxIter) {
                 break;
             }
 
-            uv += sunDir * godrayStep;
+            vec3 sampleColor = texture2D(sampler0, sampleUV).rgb;
+            float lightMask = smoothstep(threshold, 1.0, luminance(sampleColor));
+            cl += lightMask * weight;
+            weight *= GODRAY_DECAY;
+
+            sampleUV += sunDir * godrayStep;
         }
 
-        cl *= godrayIntensity;
-        c += min(1.0, cl) * SUN_COLOR;
+        float rays = cl * godrayIntensity * reachFactor;
+        color += min(1.0, rays) * SUN_COLOR;
     }
 
-    gl_FragColor = vec4(c, 1.0);
+    float sunDisk = 1.0 - smoothstep(sunSize * 0.5, sunSize, sunLen);
+    color += SUN_COLOR * sunDisk * godrayIntensity * 0.2;
+
+    gl_FragColor = vec4(color, 1.0);
 }
