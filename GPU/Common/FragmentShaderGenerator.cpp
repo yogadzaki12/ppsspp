@@ -159,9 +159,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		shading = doFlatShading ? "flat" : "";
 	}
 
-	const u32 vertType = gstate.vertType & 0x00FFFFFF;
-	const bool ge2ReduceLightHack = (ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight && (vertType == 0x32 || vertType == 0x2032);
-	const bool ge2ReduceLightVaryingInjection = ge2ReduceLightHack && ShaderLanguageIsOpenGL(compat.shaderLanguage);
+	const bool ge2ReduceLightHack = (ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight;
+	const bool ge2ReduceLightVaryingInjection = ge2ReduceLightHack;
 
 	bool forceDepthWritesOff = id.Bit(FS_BIT_DEPTH_TEST_NEVER);
 
@@ -228,6 +227,17 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		WRITE(p, "layout (location = 3) in highp float v_fogdepth;\n");
 		if (doTexture) {
 			WRITE(p, "layout (location = 0) in highp vec3 v_texcoord;\n");
+		}
+		if (ge2ReduceLightVaryingInjection) {
+			WRITE(p, "layout (location = 4) %s in lowp float flag;\n", shading);
+			WRITE(p, "layout (location = 5) %s in highp vec4 v_1;\n", shading);
+			WRITE(p, "layout (location = 6) %s in highp vec4 v_2;\n", shading);
+			WRITE(p, "layout (location = 7) %s in highp vec4 v_3;\n", shading);
+			WRITE(p, "layout (location = 8) %s in highp vec4 v_4;\n", shading);
+			WRITE(p, "layout (location = 9) %s in highp vec4 v_5;\n", shading);
+			WRITE(p, "layout (location = 10) %s in highp vec4 v_6;\n", shading);
+			WRITE(p, "layout (location = 11) %s in highp vec4 v_7;\n", shading);
+			WRITE(p, "layout (location = 12) %s in highp vec4 v_8;\n", shading);
 		}
 
 		if (enableAlphaTest && !alphaTestAgainstZero) {
@@ -859,8 +869,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 
 		if (ge2ReduceLightHack) {
-			WRITE(p, "  float ge2Lum = dot(v.rgb, vec3(0.2126, 0.7152, 0.0722));\n");
-			WRITE(p, "  float ge2Reduce = smoothstep(0.45, 1.0, ge2Lum) * 0.28;\n");
+			WRITE(p, "  float ge2Lum = max(max(v.r, v.g), v.b);\n");
+			WRITE(p, "  float ge2Reduce = smoothstep(0.30, 0.95, ge2Lum) * 0.45;\n");
 			WRITE(p, "  v.rgb *= (1.0 - ge2Reduce);\n");
 		}
 

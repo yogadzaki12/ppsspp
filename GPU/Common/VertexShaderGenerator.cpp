@@ -217,9 +217,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if (compat.glslES30 || compat.shaderLanguage == GLSL_VULKAN)
 		shading = doFlatShading ? "flat " : "";
 
-	const u32 vertType = gstate.vertType & 0x00FFFFFF;
-	const bool ge2ReduceLightHack = (ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight && (vertType == 0x32 || vertType == 0x2032);
-	const bool ge2ReduceLightVaryingInjection = ge2ReduceLightHack && ShaderLanguageIsOpenGL(compat.shaderLanguage);
+	const bool ge2ReduceLightHack = (ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight;
+	const bool ge2ReduceLightVaryingInjection = ge2ReduceLightHack;
 
 	DoLightComputation doLight[4] = { LIGHT_OFF, LIGHT_OFF, LIGHT_OFF, LIGHT_OFF };
 	if (useHWTransform) {
@@ -290,6 +289,17 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "layout (location = 0) out highp vec3 v_texcoord;\n");
 
 		WRITE(p, "layout (location = 3) out highp float v_fogdepth;\n");
+		if (ge2ReduceLightVaryingInjection) {
+			WRITE(p, "layout (location = 4) %sout lowp float flag;\n", shading);
+			WRITE(p, "layout (location = 5) %sout highp vec4 v_1;\n", shading);
+			WRITE(p, "layout (location = 6) %sout highp vec4 v_2;\n", shading);
+			WRITE(p, "layout (location = 7) %sout highp vec4 v_3;\n", shading);
+			WRITE(p, "layout (location = 8) %sout highp vec4 v_4;\n", shading);
+			WRITE(p, "layout (location = 9) %sout highp vec4 v_5;\n", shading);
+			WRITE(p, "layout (location = 10) %sout highp vec4 v_6;\n", shading);
+			WRITE(p, "layout (location = 11) %sout highp vec4 v_7;\n", shading);
+			WRITE(p, "layout (location = 12) %sout highp vec4 v_8;\n", shading);
+		}
 
 		WRITE(p, "invariant gl_Position;\n");
 	} else if (compat.shaderLanguage == HLSL_D3D11) {
