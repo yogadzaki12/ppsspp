@@ -1509,27 +1509,13 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if( vertexRangeCulling  ) WRITE(p,"// vertexRangeCulling   25 \n");
 	WRITE(p,"//flag_value: 0x%lx \n",flag_value);
 #ifdef __VERTEXT_GLSL_FILE__
-	if(is_opengles) {
-		std::ifstream glsl_in(dir_path + "/" + out_name);
-		if (glsl_in.is_open()) {
-			memset(buffer, 0x20, 16384);
-			int file_size = 0;
-			glsl_in.seekg(0, glsl_in.end);
-			file_size = glsl_in.tellg();
-			glsl_in.seekg(0, glsl_in.beg);
-			char *new_code = new char[file_size];
-			memset(new_code, 0x00, file_size);
-			glsl_in.read(new_code, file_size);
-			WRITE(p, new_code);
-			delete[]new_code;
-			glsl_in.close();
-
+	if (is_opengles || compat.shaderLanguage == GLSL_VULKAN) {
+		const Path shaderPath = Path(dir_path) / out_name;
+		std::string shaderCode;
+		if (File::ReadTextFileToString(shaderPath, &shaderCode)) {
+			WRITE(p, "%s", shaderCode.c_str());
 		} else {
-			std::ofstream glsl_out(dir_path + "/" + out_name);
-			if (glsl_out.is_open()) {
-				glsl_out.write( buffer , 16384 ) ;
-				glsl_out.close();
-			}
+			File::WriteStringToFile(true, std::string(buffer), shaderPath);
 		}
 	}
 #endif
