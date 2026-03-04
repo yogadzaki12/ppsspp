@@ -218,7 +218,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		shading = doFlatShading ? "flat " : "";
 
 	const u32 vertType = gstate.vertType & 0x00FFFFFF;
-	const bool ge2ReduceLightHack = ShaderLanguageIsOpenGL(compat.shaderLanguage) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight && (vertType == 0x32 || vertType == 0x2032);
+	const bool ge2ReduceLightHack = (ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight && (vertType == 0x32 || vertType == 0x2032);
+	const bool ge2ReduceLightVaryingInjection = ge2ReduceLightHack && ShaderLanguageIsOpenGL(compat.shaderLanguage);
 
 	DoLightComputation doLight[4] = { LIGHT_OFF, LIGHT_OFF, LIGHT_OFF, LIGHT_OFF };
 	if (useHWTransform) {
@@ -519,7 +520,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "%s mediump float v_fogdepth;\n", compat.varying_vs);
 		}
 
-		if (ge2ReduceLightHack) {
+		if (ge2ReduceLightVaryingInjection) {
 			WRITE(p, "%s %s lowp float flag;\n", shading, compat.varying_vs);
 			WRITE(p, "%s %s highp vec4 v_1;\n", shading, compat.varying_vs);
 			WRITE(p, "%s %s highp vec4 v_2;\n", shading, compat.varying_vs);
@@ -760,7 +761,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			}
 		}
 		WRITE(p, "  %sv_fogdepth = fog;\n", compat.vsOutPrefix);
-		if (ge2ReduceLightHack) {
+		if (ge2ReduceLightVaryingInjection) {
 			WRITE(p, "  %sflag = 1.0;\n", compat.vsOutPrefix);
 			WRITE(p, "  %sv_1 = vec4(0.0, 0.0, 1.0, 1.0);\n", compat.vsOutPrefix);
 			WRITE(p, "  %sv_2 = vec4(position.xyz, 1.0);\n", compat.vsOutPrefix);
@@ -859,7 +860,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		}
 
 		WRITE(p, "  vec4 viewPos = vec4(mul(vec4(worldpos, 1.0), u_view).xyz, 1.0);\n");
-		if (ge2ReduceLightHack) {
+		if (ge2ReduceLightVaryingInjection) {
 			WRITE(p, "  %sflag = 1.0;\n", compat.vsOutPrefix);
 			WRITE(p, "  %sv_1 = vec4(worldnormal, 1.0);\n", compat.vsOutPrefix);
 			WRITE(p, "  %sv_2 = vec4(viewPos.xyz, 1.0);\n", compat.vsOutPrefix);
@@ -1238,7 +1239,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "  %sv_fogdepth = (viewPos.z + u_fogcoef.x) * u_fogcoef.y;\n", compat.vsOutPrefix);
 	}
 
-	if (ge2ReduceLightHack) {
+	if (ge2ReduceLightVaryingInjection) {
 		WRITE(p, "  %sv_6 = %sv_color0;\n", compat.vsOutPrefix, compat.vsOutPrefix);
 		if (lmode) {
 			WRITE(p, "  %sv_7 = vec4(%sv_color1, 1.0);\n", compat.vsOutPrefix, compat.vsOutPrefix);

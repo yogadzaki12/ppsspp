@@ -160,7 +160,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	}
 
 	const u32 vertType = gstate.vertType & 0x00FFFFFF;
-	const bool ge2ReduceLightHack = ShaderLanguageIsOpenGL(compat.shaderLanguage) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight && (vertType == 0x32 || vertType == 0x2032);
+	const bool ge2ReduceLightHack = (ShaderLanguageIsOpenGL(compat.shaderLanguage) || compat.shaderLanguage == ShaderLanguage::GLSL_VULKAN) && PSP_CoreParameter().compat.flags().GodEater2ReduceLight && (vertType == 0x32 || vertType == 0x2032);
+	const bool ge2ReduceLightVaryingInjection = ge2ReduceLightHack && ShaderLanguageIsOpenGL(compat.shaderLanguage);
 
 	bool forceDepthWritesOff = id.Bit(FS_BIT_DEPTH_TEST_NEVER);
 
@@ -407,7 +408,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (doTexture) {
 			WRITE(p, "%s %s vec3 v_texcoord;\n", compat.varying_fs, highpTexcoord ? "highp" : "mediump");
 		}
-		if (ge2ReduceLightHack) {
+		if (ge2ReduceLightVaryingInjection) {
 			WRITE(p, "%s %s lowp float flag;\n", shading, compat.varying_fs);
 			WRITE(p, "%s %s highp vec4 v_1;\n", shading, compat.varying_fs);
 			WRITE(p, "%s %s highp vec4 v_2;\n", shading, compat.varying_fs);
