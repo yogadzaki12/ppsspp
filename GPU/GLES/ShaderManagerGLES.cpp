@@ -42,6 +42,7 @@
 #include "Common/File/FileUtil.h"
 #include "Common/TimeUtil.h"
 #include "Core/Config.h"
+#include "Core/System.h"
 #include "GPU/Math3D.h"
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
@@ -688,6 +689,56 @@ void LinkedShader::UpdateUniforms(const ShaderID &vsid, bool useBufferedRenderin
 
 static constexpr size_t CODE_BUFFER_SIZE = 32768;
 
+static bool ApplyGeneratedShaderOverride(const char *stagePrefix, const ShaderID &id, char *codeBuffer, size_t codeBufferSize) {
+	Path generatedDir = GetSysDirectory(DIRECTORY_CUSTOM_SHADERS) / "generated";
+	if (!File::Exists(generatedDir)) {
+		File::CreateFullPath(generatedDir);
+	}
+
+	char fileName[40];
+	snprintf(fileName, sizeof(fileName), "%s_%08x%08x.glsl", stagePrefix, id.d[0], id.d[1]);
+	Path shaderPath = generatedDir / fileName;
+
+	const char *legacyPrefix = !strcmp(stagePrefix, "vs") ? "Vertex" : "Fragment";
+	char legacyFileName[40];
+	snprintf(legacyFileName, sizeof(legacyFileName), "%s_0x%08x.glsl", legacyPrefix, id.d[0]);
+	Path legacyShaderPath = generatedDir / legacyFileName;
+
+	std::string fileData;
+	if (File::ReadFileToString(true, shaderPath, &fileData)) {
+		if (fileData.empty()) {
+			WARN_LOG(Log::G3D, "Shader override file is empty, ignoring: %s", shaderPath.c_str());
+			return false;
+		}
+		if (fileData.size() >= codeBufferSize) {
+			ERROR_LOG(Log::G3D, "Shader override file too large (%zu >= %zu): %s", fileData.size(), codeBufferSize, shaderPath.c_str());
+			return false;
+		}
+
+		memcpy(codeBuffer, fileData.c_str(), fileData.size() + 1);
+		INFO_LOG(Log::G3D, "Loaded generated shader override: %s", shaderPath.c_str());
+		return true;
+	}
+
+	if (File::ReadFileToString(true, legacyShaderPath, &fileData)) {
+		if (fileData.empty()) {
+			WARN_LOG(Log::G3D, "Legacy shader override file is empty, ignoring: %s", legacyShaderPath.c_str());
+			return false;
+		}
+		if (fileData.size() >= codeBufferSize) {
+			ERROR_LOG(Log::G3D, "Legacy shader override file too large (%zu >= %zu): %s", fileData.size(), codeBufferSize, legacyShaderPath.c_str());
+			return false;
+		}
+
+		memcpy(codeBuffer, fileData.c_str(), fileData.size() + 1);
+		INFO_LOG(Log::G3D, "Loaded legacy generated shader override: %s", legacyShaderPath.c_str());
+		return true;
+	}
+
+	File::WriteStringToFile(true, codeBuffer, shaderPath);
+	return false;
+}
+
 ShaderManagerGLES::ShaderManagerGLES(Draw::DrawContext *draw)
 	  : ShaderManagerCommon(draw), fsCache_(16), vsCache_(16) {
 	render_ = (GLRenderManager *)draw->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
@@ -753,6 +804,7 @@ Shader *ShaderManagerGLES::CompileFragmentShader(FShaderID FSID) {
 		ERROR_LOG_REPORT(Log::G3D, "FS shader gen error: %s (%s: %08x:%08x)", errorString.c_str(), "GLES", FSID.d[0], FSID.d[1]);
 		return nullptr;
 	}
+	ApplyGeneratedShaderOverride("fs", FSID, codeBuffer_, CODE_BUFFER_SIZE);
 	_assert_msg_(strlen(codeBuffer_) < CODE_BUFFER_SIZE, "FS length error: %d", (int)strlen(codeBuffer_));
 	std::string desc = FragmentShaderDesc(FSID);
 	ShaderDescGLES params{ GL_FRAGMENT_SHADER, 0, uniformMask };
@@ -771,6 +823,7 @@ Shader *ShaderManagerGLES::CompileVertexShader(VShaderID VSID) {
 		ERROR_LOG_REPORT(Log::G3D, "VS shader gen error: %s (%s: %08x:%08x)", errorString.c_str(), "GLES", VSID.d[0], VSID.d[1]);
 		return nullptr;
 	}
+	ApplyGeneratedShaderOverride("vs", VSID, codeBuffer_, CODE_BUFFER_SIZE);
 	_assert_msg_(strlen(codeBuffer_) < CODE_BUFFER_SIZE, "VS length error: %d", (int)strlen(codeBuffer_));
 	std::string desc = VertexShaderDesc(VSID);
 	ShaderDescGLES params{ GL_VERTEX_SHADER, attrMask, uniformMask };
