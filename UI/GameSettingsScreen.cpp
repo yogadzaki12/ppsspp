@@ -674,6 +674,12 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	ge2BloomReduction->SetEnabledFunc([]() {
 		return PSP_CoreParameter().compat.flags().ReduceBloomStrength && !g_Config.bSkipBufferEffects;
 	});
+	PopupSliderChoice *ge2CameraZoom = graphicsSettings->Add(new PopupSliderChoice(&g_Config.iGE2CameraZoomPercent, 50, 200, 100, gr->T("God Eater 2 camera zoom"), screenManager(), "%"));
+	ge2CameraZoom->SetFormat("%d%%");
+	ge2CameraZoom->SetLiveUpdate(true);
+	ge2CameraZoom->SetEnabledFunc([]() {
+		return PSP_CoreParameter().compat.flags().CameraZoomFactor > 0;
+	});
 }
 
 void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {
