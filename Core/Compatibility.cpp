@@ -165,6 +165,7 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "FileCreatedTimeHack", &flags_.FileCreatedTimeHack);
 	CheckSetting(iniFile, gameID, "FastEmulatedGPU", &flags_.FastEmulatedGPU);
 	CheckSetting(iniFile, gameID, "ReduceBloomStrength", &flags_.ReduceBloomStrength);
+	CheckSetting(iniFile, gameID, "CameraZoomFactor", &flags_.CameraZoomFactor);
 }
 
 void Compatibility::CheckVRSettings(IniFile &iniFile, const std::string &gameID) {

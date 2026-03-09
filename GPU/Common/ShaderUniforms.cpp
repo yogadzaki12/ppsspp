@@ -7,6 +7,7 @@
 #include "Common/Math/lin/matrix4x4.h"
 #include "Common/Math/math_util.h"
 #include "Common/Math/lin/vec3.h"
+#include "Core/System.h"
 #include "GPU/GPUState.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/GPUStateUtils.h"
@@ -114,6 +115,20 @@ void BaseUpdateUniforms(UB_VS_FS_Base *ub, uint64_t dirtyUniforms, bool flipView
 	if (dirtyUniforms & DIRTY_PROJMATRIX) {
 		Matrix4x4 flippedMatrix;
 		memcpy(&flippedMatrix, gstate.projMatrix, 16 * sizeof(float));
+
+		// Per-game camera zoom hack for 3D only.
+		// 100 = neutral, >100 = zoom in, <100 = zoom out.
+		if (!gstate.isModeThrough()) {
+			int cameraZoomFactor = PSP_CoreParameter().compat.flags().CameraZoomFactor;
+			if (cameraZoomFactor <= 0) {
+				cameraZoomFactor = 100;
+			}
+			if (cameraZoomFactor != 100) {
+				const float zoomScale = (float)cameraZoomFactor * (1.0f / 100.0f);
+				flippedMatrix.xx *= zoomScale;
+				flippedMatrix.yy *= zoomScale;
+			}
+		}
 
 		const bool invertedY = gstate_c.vpHeight < 0;
 		if (invertedY) {
