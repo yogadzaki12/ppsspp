@@ -125,6 +125,7 @@ struct CompatFlags {
 	bool FastEmulatedGPU;
 	bool ReduceBloomStrength;
 	int CameraZoomFactor;
+	int RoundedWorldFactor;
 };
 
 struct VRCompat {

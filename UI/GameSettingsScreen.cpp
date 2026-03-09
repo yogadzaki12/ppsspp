@@ -680,6 +680,11 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	ge2CameraZoom->SetEnabledFunc([]() {
 		return PSP_CoreParameter().compat.flags().CameraZoomFactor > 0;
 	});
+
+	PopupSliderChoice *roundedWorld = graphicsSettings->Add(new PopupSliderChoice(&g_Config.iRoundedWorldPercent, 0, 200, 0, gr->T("Rounded world effect"), screenManager(), "%"));
+	roundedWorld->SetFormat("%d%%");
+	roundedWorld->SetLiveUpdate(true);
+	// Always enabled - no compat flag required
 }
 
 void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {

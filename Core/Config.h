@@ -361,6 +361,7 @@ public:
 	int iBloomHack; //0 = off, 1 = safe, 2 = balanced, 3 = aggressive
 	int iGE2BloomReductionPercent; // 0-100, reduces in-game bloom for God Eater 2 via compat flag
 	int iGE2CameraZoomPercent; // 50-200, multiplies GE2 camera zoom hack factor
+	int iRoundedWorldPercent; // 0-200, controls rounded world effect strength
 	int iSkipGPUReadbackMode;  // 0 = off, 1 = skip, 2 = to texture
 	int iSplineBezierQuality; // 0 = low , 1 = Intermediate , 2 = High
 	bool bHardwareTessellation;

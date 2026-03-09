@@ -814,6 +814,7 @@ static const ConfigSetting graphicsSettings[] = {
 	ConfigSetting("BloomHack", SETTING(g_Config, iBloomHack), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("GE2BloomReductionPercent", SETTING(g_Config, iGE2BloomReductionPercent), 60, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("GE2CameraZoomPercent", SETTING(g_Config, iGE2CameraZoomPercent), 100, CfgFlag::PER_GAME | CfgFlag::REPORT),
+	ConfigSetting("RoundedWorldPercent", SETTING(g_Config, iRoundedWorldPercent), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
 
 	// Not really a graphics setting...
 	ConfigSetting("SplineBezierQuality", SETTING(g_Config, iSplineBezierQuality), 2, CfgFlag::PER_GAME | CfgFlag::REPORT),

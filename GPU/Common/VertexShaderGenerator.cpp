@@ -1286,6 +1286,29 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			compat.vsOutPrefix, compat.vsOutPrefix, compat.vsOutPrefix);
 	}
 
+	// Rounded world effect hack for 3D only (not UI/through-mode)
+	if (!isModeThrough && useHWTransform) {
+		const bool perspectiveProjection = std::fabs(gstate.projMatrix[15]) < 0.5f;
+		if (gstate.isDepthTestEnabled() && gstate.isDepthWriteEnabled() && perspectiveProjection) {
+			const int userRoundedPercent = std::clamp(g_Config.iRoundedWorldPercent, 0, 200);
+			if (userRoundedPercent > 0) {
+				// Apply rounded world distortion
+				// Use compat flag as multiplier if available, otherwise default to 100
+				int roundedWorldFactor = PSP_CoreParameter().compat.flags().RoundedWorldFactor;
+				if (roundedWorldFactor <= 0) {
+					roundedWorldFactor = 100; // Default base strength
+				}
+				WRITE(p, "  {\n");
+				WRITE(p, "    vec2 ndc = %sgl_Position.xy / %sgl_Position.w;\n", compat.vsOutPrefix, compat.vsOutPrefix);
+				WRITE(p, "    float distFromCenter = length(ndc);\n");
+				WRITE(p, "    float curveFactor = %f;\n", (float)roundedWorldFactor * (float)userRoundedPercent * 0.00001f);
+				WRITE(p, "    float curveAmount = distFromCenter * distFromCenter * curveFactor;\n");
+				WRITE(p, "    %sgl_Position.z += curveAmount * %sgl_Position.w;\n", compat.vsOutPrefix, compat.vsOutPrefix);
+				WRITE(p, "  }\n");
+			}
+		}
+	}
+
 	if (compat.shaderLanguage == HLSL_D3D11) {
 		WRITE(p, "  return Out;\n");
 	}
