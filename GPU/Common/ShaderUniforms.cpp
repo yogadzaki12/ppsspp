@@ -119,7 +119,8 @@ void BaseUpdateUniforms(UB_VS_FS_Base *ub, uint64_t dirtyUniforms, bool flipView
 
 		// Per-game camera zoom hack for 3D only.
 		// 100 = neutral, >100 = zoom in, <100 = zoom out.
-		if (!gstate.isModeThrough() && !gstate.isModeClear() && gstate.isDepthTestEnabled()) {
+		const bool perspectiveProjection = std::fabs(gstate.projMatrix[15]) < 0.5f;
+		if (!gstate.isModeThrough() && !gstate.isModeClear() && gstate.isDepthTestEnabled() && perspectiveProjection) {
 			int cameraZoomFactor = PSP_CoreParameter().compat.flags().CameraZoomFactor;
 			if (cameraZoomFactor > 0) {
 				const int userZoomPercent = std::clamp(g_Config.iGE2CameraZoomPercent, 50, 200);
