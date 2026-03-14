@@ -602,26 +602,45 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	}
 
 	graphicsSettings->Add(new ItemHeader(gr->T("Patch")));
-	patchHBAOEnabled_ = g_Config.bPatchHBAOEnabled;
-	CheckBox *hbaoPatch = graphicsSettings->Add(new CheckBox(&patchHBAOEnabled_, gr->T("Enable HBAO Patch")));
-	hbaoPatch->SetEnabledFunc([]() {
+	static const char *patchModes[] = { "Off", "HBAO", "SSR", "HBAO + SSR" };
+	patchMode_ = (g_Config.bPatchHBAOEnabled ? 1 : 0) | (g_Config.bPatchSSREnabled ? 2 : 0);
+	PopupMultiChoice *patchMode = graphicsSettings->Add(new PopupMultiChoice(&patchMode_, gr->T("Patch Mode"), patchModes, 0, ARRAY_SIZE(patchModes), I18NCat::GRAPHICS, screenManager()));
+	patchMode->SetEnabledFunc([]() {
 		return !g_Config.bSoftwareRendering;
 	});
-	hbaoPatch->OnClick.Add([this](UI::EventParams &) {
-		g_Config.bPatchHBAOEnabled = patchHBAOEnabled_;
+	patchMode->OnChoice.Add([this](UI::EventParams &) {
+		g_Config.bPatchHBAOEnabled = (patchMode_ & 1) != 0;
+		g_Config.bPatchSSREnabled = (patchMode_ & 2) != 0;
 		System_PostUIMessage(UIMessage::GPU_CONFIG_CHANGED);
+		RecreateViews();
 	});
 
 	PopupSliderChoiceFloat *hbaoRadius = graphicsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fPatchHBAORadius, 0.5f, 16.0f, 5.0f, gr->T("HBAO Radius"), 0.1f, screenManager()));
 	hbaoRadius->SetEnabledFunc([this]() {
-		return !g_Config.bSoftwareRendering && patchHBAOEnabled_;
+		return !g_Config.bSoftwareRendering && (patchMode_ & 1) != 0;
 	});
 	hbaoRadius->SetLiveUpdate(true);
 	PopupSliderChoiceFloat *hbaoIntensity = graphicsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fPatchHBAOIntensity, 0.0f, 4.0f, 1.5f, gr->T("HBAO Intensity"), 0.05f, screenManager()));
 	hbaoIntensity->SetEnabledFunc([this]() {
-		return !g_Config.bSoftwareRendering && patchHBAOEnabled_;
+		return !g_Config.bSoftwareRendering && (patchMode_ & 1) != 0;
 	});
 	hbaoIntensity->SetLiveUpdate(true);
+
+	PopupSliderChoice *ssrSteps = graphicsSettings->Add(new PopupSliderChoice(&g_Config.iPatchSSRSteps, 4, 64, 16, gr->T("SSR Steps"), 1, screenManager()));
+	ssrSteps->SetEnabledFunc([this]() {
+		return !g_Config.bSoftwareRendering && (patchMode_ & 2) != 0;
+	});
+	ssrSteps->SetLiveUpdate(true);
+	PopupSliderChoiceFloat *ssrIntensity = graphicsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fPatchSSRIntensity, 0.0f, 2.0f, 0.5f, gr->T("SSR Intensity"), 0.05f, screenManager()));
+	ssrIntensity->SetEnabledFunc([this]() {
+		return !g_Config.bSoftwareRendering && (patchMode_ & 2) != 0;
+	});
+	ssrIntensity->SetLiveUpdate(true);
+	PopupSliderChoiceFloat *ssrStride = graphicsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fPatchSSRStride, 0.005f, 0.1f, 0.02f, gr->T("SSR Stride"), 0.001f, screenManager()));
+	ssrStride->SetEnabledFunc([this]() {
+		return !g_Config.bSoftwareRendering && (patchMode_ & 2) != 0;
+	});
+	ssrStride->SetLiveUpdate(true);
 
 #ifndef MOBILE_DEVICE
 	static const char *texScaleLevels[] = {"Off", "2x", "3x", "4x", "5x"};
