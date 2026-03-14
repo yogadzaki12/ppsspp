@@ -1084,6 +1084,17 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 	RunHBAOCompute();
 	RunSSRCompute();
 
+	// If compute passes ran (HBAO / SSR), BeginComputeStep() replaced the active render step
+	// with a COMPUTE step.  Subsequent draw calls (including the ones below and in CopyToOutput)
+	// require a RENDER step, so we must re-bind the backbuffer as a render target here.
+	// GLRenderManager's dupe-elimination makes this a no-op if the backbuffer render step is
+	// already the most recent one (i.e. when no compute ran this frame).
+	if (hbaoComputedThisFrame_ || ssrComputedThisFrame_) {
+		draw_->BindFramebufferAsRenderTarget(nullptr,
+			{Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE},
+			"ResumeRenderAfterCompute");
+	}
+
 	// TODO: If shader objects have been created by now, we might have received errors.
 	// GLES can have the shader fail later, shader->failed / shader->error.
 	// This should auto-disable usePostShader_ and call ShowPostShaderError().
