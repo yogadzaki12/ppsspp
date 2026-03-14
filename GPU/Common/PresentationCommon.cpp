@@ -59,6 +59,22 @@ struct HBAOComputeLocData : public GLRProgramLocData {
 	GLint radiusLoc = -1;
 	GLint intensityLoc = -1;
 };
+
+struct DepthPyrComputeLocData : public GLRProgramLocData {
+	GLint srcTexLoc = -1;
+};
+
+struct SSRComputeLocData : public GLRProgramLocData {
+	GLint colorTexLoc  = -1;
+	GLint depthMip0Loc = -1;
+	GLint depthMip1Loc = -1;
+	GLint depthMip2Loc = -1;
+	GLint depthMip3Loc = -1;
+	GLint resolutionLoc = -1;
+	GLint stepsLoc     = -1;
+	GLint intensityLoc = -1;
+	GLint strideLoc    = -1;
+};
 #endif
 
 static bool LoadAssetShaderSource(const char *name, std::string *source) {
@@ -596,6 +612,7 @@ void PresentationCommon::DestroyDeviceObjects() {
 	DoRelease(srcTexture_);
 	DoRelease(srcFramebuffer_);
 	DestroyHBAOResources();
+	DestroySSRResources();
 
 	restorePostShader_ = usePostShader_;
 	DestroyPostShader();
@@ -651,6 +668,7 @@ void PresentationCommon::SourceTexture(Draw::Texture *texture, int bufferWidth, 
 	srcTexture_ = texture;
 	srcHasDepth_ = false;
 	hbaoComputedThisFrame_ = false;
+	ssrComputedThisFrame_  = false;
 	srcWidth_ = bufferWidth;
 	srcHeight_ = bufferHeight;
 }
@@ -664,6 +682,7 @@ void PresentationCommon::SourceFramebuffer(Draw::Framebuffer *fb, int bufferWidt
 	srcFramebuffer_ = fb;
 	srcHasDepth_ = draw_->GetDeviceCaps().textureDepthSupported;
 	hbaoComputedThisFrame_ = false;
+	ssrComputedThisFrame_  = false;
 	srcWidth_ = bufferWidth;
 	srcHeight_ = bufferHeight;
 }
@@ -792,6 +811,221 @@ bool PresentationCommon::RunHBAOCompute() {
 #endif
 }
 
+// ---------------------------------------------------------------------------
+// Hierarchical SSR helpers
+// ---------------------------------------------------------------------------
+
+bool PresentationCommon::EnsureSSRTextures(int width, int height) {
+	// Check if already valid
+	if (ssrOutputTex_ && ssrWidth_ == width && ssrHeight_ == height) {
+		return true;
+	}
+
+	DoRelease(ssrOutputTex_);
+	for (int i = 0; i < 3; i++) {
+		DoRelease(ssrDepthPyr_[i]);
+	}
+	ssrWidth_ = 0;
+	ssrHeight_ = 0;
+
+	Draw::TextureDesc desc{};
+	desc.type          = Draw::TextureType::LINEAR2D;
+	desc.format        = Draw::DataFormat::R8G8B8A8_UNORM;
+	desc.depth         = 1;
+	desc.mipLevels     = 1;
+	desc.generateMips  = false;
+	desc.swizzle       = Draw::TextureSwizzle::DEFAULT;
+
+	// Full-res SSR colour output
+	desc.width  = width;
+	desc.height = height;
+	desc.tag    = "SSROutput";
+	ssrOutputTex_ = draw_->CreateTexture(desc);
+	if (!ssrOutputTex_) {
+		return false;
+	}
+
+	// Depth pyramid: half, quarter, eighth resolution
+	for (int i = 0; i < 3; i++) {
+		desc.width  = std::max(1, width  >> (i + 1));
+		desc.height = std::max(1, height >> (i + 1));
+		desc.tag    = "SSRDepthPyr";
+		ssrDepthPyr_[i] = draw_->CreateTexture(desc);
+		if (!ssrDepthPyr_[i]) {
+			DoRelease(ssrOutputTex_);
+			for (int j = 0; j < i; j++) DoRelease(ssrDepthPyr_[j]);
+			return false;
+		}
+	}
+
+	ssrWidth_  = width;
+	ssrHeight_ = height;
+	return true;
+}
+
+void PresentationCommon::DestroySSRResources() {
+	ssrComputedThisFrame_ = false;
+	ssrWidth_  = 0;
+	ssrHeight_ = 0;
+	DoRelease(ssrOutputTex_);
+	for (int i = 0; i < 3; i++) {
+		DoRelease(ssrDepthPyr_[i]);
+	}
+
+#if PPSSPP_API(ANY_GL)
+	if (GLRenderManager *rm = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
+		if (depthPyrComputeProgram_) { rm->DeleteProgram(depthPyrComputeProgram_); depthPyrComputeProgram_ = nullptr; }
+		if (depthPyrComputeShader_)  { rm->DeleteShader(depthPyrComputeShader_);   depthPyrComputeShader_  = nullptr; }
+		if (ssrComputeProgram_)      { rm->DeleteProgram(ssrComputeProgram_);       ssrComputeProgram_      = nullptr; }
+		if (ssrComputeShader_)       { rm->DeleteShader(ssrComputeShader_);         ssrComputeShader_       = nullptr; }
+	}
+	depthPyrComputeLocData_ = nullptr;
+	ssrComputeLocData_      = nullptr;
+#endif
+}
+
+bool PresentationCommon::RunSSRCompute() {
+	ssrComputedThisFrame_ = false;
+
+	if (!g_Config.bPatchSSREnabled || !srcFramebuffer_ || !srcHasDepth_ || (outputFlags_ & OutputFlags::RB_SWIZZLE)) {
+		return false;
+	}
+
+#if !PPSSPP_API(ANY_GL)
+	return false;
+#elif PPSSPP_PLATFORM(IOS)
+	return false;
+#else
+	if (!gl_extensions.IsGLES || !gl_extensions.VersionGEThan(3, 1)) {
+		return false;
+	}
+
+	GLRenderManager *rm = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
+	if (!rm) {
+		return false;
+	}
+
+	if (!EnsureSSRTextures(srcWidth_, srcHeight_)) {
+		return false;
+	}
+
+	// ---- Build programs on first use ----------------------------------------
+	if (!depthPyrComputeProgram_) {
+		std::string src;
+		if (!LoadAssetShaderSource("depth_pyramid.csh", &src)) {
+			return false;
+		}
+		depthPyrComputeShader_ = rm->CreateShader(GL_COMPUTE_SHADER, src, "DepthPyramid");
+		auto *loc = new DepthPyrComputeLocData();
+		depthPyrComputeLocData_ = loc;
+		std::vector<GLRProgram::UniformLocQuery> queries = {
+			{ &loc->srcTexLoc, "srcTex", true },
+		};
+		std::vector<GLRProgram::Initializer> initialize = {
+			{ &loc->srcTexLoc, 0, 1 },  // srcTex → texture unit 1
+		};
+		depthPyrComputeProgram_ = rm->CreateProgram({ depthPyrComputeShader_ }, {}, queries, initialize, loc, GLRProgramFlags{});
+	}
+
+	if (!ssrComputeProgram_) {
+		std::string src;
+		if (!LoadAssetShaderSource("ssr.csh", &src)) {
+			return false;
+		}
+		ssrComputeShader_ = rm->CreateShader(GL_COMPUTE_SHADER, src, "SSRCompute");
+		auto *loc = new SSRComputeLocData();
+		ssrComputeLocData_ = loc;
+		std::vector<GLRProgram::UniformLocQuery> queries = {
+			{ &loc->colorTexLoc,   "colorTex",     true },
+			{ &loc->depthMip0Loc,  "depthMip0",    true },
+			{ &loc->depthMip1Loc,  "depthMip1",    true },
+			{ &loc->depthMip2Loc,  "depthMip2",    true },
+			{ &loc->depthMip3Loc,  "depthMip3",    true },
+			{ &loc->resolutionLoc, "u_resolution", true },
+			{ &loc->stepsLoc,      "u_steps",      true },
+			{ &loc->intensityLoc,  "u_intensity",  true },
+			{ &loc->strideLoc,     "u_stride",     true },
+		};
+		std::vector<GLRProgram::Initializer> initialize = {
+			{ &loc->colorTexLoc,  0, 0 },  // colorTex  → unit 0
+			{ &loc->depthMip0Loc, 0, 1 },  // depthMip0 → unit 1
+			{ &loc->depthMip1Loc, 0, 2 },  // depthMip1 → unit 2
+			{ &loc->depthMip2Loc, 0, 3 },  // depthMip2 → unit 3
+			{ &loc->depthMip3Loc, 0, 4 },  // depthMip3 → unit 4
+		};
+		ssrComputeProgram_ = rm->CreateProgram({ ssrComputeShader_ }, {}, queries, initialize, loc, GLRProgramFlags{});
+	}
+
+	// ---- Get native texture handles -----------------------------------------
+	GLRTexture *colorTex  = nullptr;
+	if (hbaoComputedThisFrame_ && hbaoTexture_) {
+		colorTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::TEXTURE_VIEW, hbaoTexture_);
+	}
+	if (!colorTex) {
+		colorTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::BACKBUFFER_COLOR_TEX, srcFramebuffer_);
+	}
+	GLRTexture *depthTex   = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::BACKBUFFER_DEPTH_TEX, srcFramebuffer_);
+	GLRTexture *pyr0       = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::TEXTURE_VIEW, ssrDepthPyr_[0]);
+	GLRTexture *pyr1       = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::TEXTURE_VIEW, ssrDepthPyr_[1]);
+	GLRTexture *pyr2       = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::TEXTURE_VIEW, ssrDepthPyr_[2]);
+	GLRTexture *ssrOutTex  = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::TEXTURE_VIEW, ssrOutputTex_);
+
+	if (!colorTex || !depthTex || !pyr0 || !pyr1 || !pyr2 || !ssrOutTex) {
+		return false;
+	}
+	if (!depthPyrComputeLocData_ || !ssrComputeLocData_) {
+		return false;
+	}
+
+	const GLbitfield barrier = GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT;
+
+	// ---- Pass A: depthTex → pyramidLevel0 (half-res) -----------------------
+	int gW0 = (ssrWidth_  / 2 + 7) / 8;
+	int gH0 = (ssrHeight_ / 2 + 7) / 8;
+	rm->BeginComputeStep("DepthPyrA");
+	rm->BindProgram(depthPyrComputeProgram_);
+	rm->BindTexture(1, depthTex);
+	rm->DispatchCompute(pyr0, 0, GL_WRITE_ONLY, GL_RGBA8, gW0, gH0, 1, barrier);
+
+	// ---- Pass B: pyramidLevel0 → pyramidLevel1 (quarter-res) ---------------
+	int gW1 = (ssrWidth_  / 4 + 7) / 8;
+	int gH1 = (ssrHeight_ / 4 + 7) / 8;
+	rm->BeginComputeStep("DepthPyrB");
+	rm->BindProgram(depthPyrComputeProgram_);
+	rm->BindTexture(1, pyr0);
+	rm->DispatchCompute(pyr1, 0, GL_WRITE_ONLY, GL_RGBA8, gW1, gH1, 1, barrier);
+
+	// ---- Pass C: pyramidLevel1 → pyramidLevel2 (eighth-res) ----------------
+	int gW2 = (ssrWidth_  / 8 + 7) / 8;
+	int gH2 = (ssrHeight_ / 8 + 7) / 8;
+	rm->BeginComputeStep("DepthPyrC");
+	rm->BindProgram(depthPyrComputeProgram_);
+	rm->BindTexture(1, pyr1);
+	rm->DispatchCompute(pyr2, 0, GL_WRITE_ONLY, GL_RGBA8, gW2, gH2, 1, barrier);
+
+	// ---- Pass D: SSR ray march ----------------------------------------------
+	auto *ssrLoc = (SSRComputeLocData *)ssrComputeLocData_;
+	const float resolution[2] = { (float)srcWidth_, (float)srcHeight_ };
+
+	rm->BeginComputeStep("SSRCompute");
+	rm->BindProgram(ssrComputeProgram_);
+	rm->BindTexture(0, colorTex);
+	rm->BindTexture(1, depthTex);
+	rm->BindTexture(2, pyr0);
+	rm->BindTexture(3, pyr1);
+	rm->BindTexture(4, pyr2);
+	rm->SetUniformF(&ssrLoc->resolutionLoc, 2, resolution);
+	rm->SetUniformI1(&ssrLoc->stepsLoc,      g_Config.iPatchSSRSteps);
+	rm->SetUniformF1(&ssrLoc->intensityLoc,  g_Config.fPatchSSRIntensity);
+	rm->SetUniformF1(&ssrLoc->strideLoc,     g_Config.fPatchSSRStride);
+	rm->DispatchCompute(ssrOutTex, 0, GL_WRITE_ONLY, GL_RGBA8,
+	                    (srcWidth_ + 7) / 8, (srcHeight_ + 7) / 8, 1, barrier);
+
+	ssrComputedThisFrame_ = true;
+	return true;
+#endif
+}
+
 // Return value is if stereo binding succeeded.
 bool PresentationCommon::BindSource(int binding, bool bindStereo) {
 	if (srcTexture_) {
@@ -831,6 +1065,7 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 	postShaderOutput_ = nullptr;
 	outputFlags_ = flags;
 	RunHBAOCompute();
+	RunSSRCompute();
 
 	// TODO: If shader objects have been created by now, we might have received errors.
 	// GLES can have the shader fail later, shader->failed / shader->error.
@@ -959,6 +1194,8 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 	const auto performShaderPass = [&](const ShaderInfo *shaderInfo, Draw::Framebuffer *postShaderFramebuffer, Draw::Pipeline *postShaderPipeline, int vertsOffset) {
 		if (postShaderOutput_) {
 			draw_->BindFramebufferAsTexture(postShaderOutput_, 0, Draw::Aspect::COLOR_BIT, 0);
+		} else if (ssrComputedThisFrame_) {
+			draw_->BindTexture(0, ssrOutputTex_);
 		} else if (hbaoComputedThisFrame_) {
 			draw_->BindTexture(0, hbaoTexture_);
 		} else {
@@ -1092,6 +1329,8 @@ void PresentationCommon::CopyToOutput(const DisplayLayoutConfig &config) {
 		draw_->BindPipeline(pipeline);
 		if (postShaderOutput_) {
 			draw_->BindFramebufferAsTexture(postShaderOutput_, 0, Draw::Aspect::COLOR_BIT, 0);
+		} else if (ssrComputedThisFrame_) {
+			draw_->BindTexture(0, ssrOutputTex_);
 		} else if (hbaoComputedThisFrame_) {
 			draw_->BindTexture(0, hbaoTexture_);
 		} else {

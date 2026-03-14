@@ -820,6 +820,10 @@ static const ConfigSetting graphicsSettings[] = {
 	ConfigSetting("PatchHBAOEnabled", SETTING(g_Config, bPatchHBAOEnabled), false, CfgFlag::PER_GAME),
 	ConfigSetting("PatchHBAORadius", SETTING(g_Config, fPatchHBAORadius), 5.0f, CfgFlag::PER_GAME),
 	ConfigSetting("PatchHBAOIntensity", SETTING(g_Config, fPatchHBAOIntensity), 1.5f, CfgFlag::PER_GAME),
+	ConfigSetting("PatchSSREnabled", SETTING(g_Config, bPatchSSREnabled), false, CfgFlag::PER_GAME),
+	ConfigSetting("PatchSSRSteps", SETTING(g_Config, iPatchSSRSteps), 16, CfgFlag::PER_GAME),
+	ConfigSetting("PatchSSRIntensity", SETTING(g_Config, fPatchSSRIntensity), 0.5f, CfgFlag::PER_GAME),
+	ConfigSetting("PatchSSRStride", SETTING(g_Config, fPatchSSRStride), 0.02f, CfgFlag::PER_GAME),
 	ConfigSetting("ShaderChainRequires60FPS", SETTING(g_Config, bShaderChainRequires60FPS), false, CfgFlag::PER_GAME),
 
 	ConfigSetting("SkipGPUReadbackMode", SETTING(g_Config, iSkipGPUReadbackMode), false, CfgFlag::PER_GAME | CfgFlag::REPORT),

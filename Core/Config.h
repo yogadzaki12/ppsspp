@@ -383,6 +383,10 @@ public:
 	bool bPatchHBAOEnabled;
 	float fPatchHBAORadius;
 	float fPatchHBAOIntensity;
+	bool bPatchSSREnabled;
+	int  iPatchSSRSteps;
+	float fPatchSSRIntensity;
+	float fPatchSSRStride;
 	bool bGfxDebugOutput;
 	int iInflightFrames;
 	bool bRenderDuplicateFrames;

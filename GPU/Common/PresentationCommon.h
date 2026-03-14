@@ -162,6 +162,9 @@ protected:
 	bool RunHBAOCompute();
 	bool EnsureHBAOTexture(int width, int height);
 	void DestroyHBAOResources();
+	bool RunSSRCompute();
+	bool EnsureSSRTextures(int width, int height);
+	void DestroySSRResources();
 
 	Draw::DrawContext *draw_;
 	Draw::Pipeline *texColor_ = nullptr;
@@ -190,6 +193,12 @@ protected:
 	int srcHeight_ = 0;
 	int hbaoWidth_ = 0;
 	int hbaoHeight_ = 0;
+
+	Draw::Texture *ssrOutputTex_   = nullptr;
+	Draw::Texture *ssrDepthPyr_[3] = {};
+	bool ssrComputedThisFrame_     = false;
+	int  ssrWidth_  = 0;
+	int  ssrHeight_ = 0;
 	bool hasVideo_ = false;
 
 	int pixelWidth_ = 0;
@@ -215,8 +224,14 @@ protected:
 	OutputFlags outputFlags_ = OutputFlags::DEFAULT;
 
 #if PPSSPP_API(ANY_GL)
-	GLRShader *hbaoComputeShader_ = nullptr;
+	GLRShader  *hbaoComputeShader_  = nullptr;
 	GLRProgram *hbaoComputeProgram_ = nullptr;
-	void *hbaoComputeLocData_ = nullptr;
+	void *hbaoComputeLocData_       = nullptr;
+	GLRShader  *depthPyrComputeShader_  = nullptr;
+	GLRProgram *depthPyrComputeProgram_ = nullptr;
+	void *depthPyrComputeLocData_       = nullptr;
+	GLRShader  *ssrComputeShader_  = nullptr;
+	GLRProgram *ssrComputeProgram_ = nullptr;
+	void *ssrComputeLocData_       = nullptr;
 #endif
 };
