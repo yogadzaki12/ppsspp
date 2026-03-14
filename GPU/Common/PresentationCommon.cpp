@@ -722,14 +722,16 @@ void PresentationCommon::DestroyHBAOResources() {
 	DoRelease(hbaoTexture_);
 
 #if PPSSPP_API(ANY_GL)
-	if (GLRenderManager *renderManager = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
-		if (hbaoComputeProgram_) {
-			renderManager->DeleteProgram(hbaoComputeProgram_);
-			hbaoComputeProgram_ = nullptr;
-		}
-		if (hbaoComputeShader_) {
-			renderManager->DeleteShader(hbaoComputeShader_);
-			hbaoComputeShader_ = nullptr;
+	if (draw_) {
+		if (GLRenderManager *renderManager = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
+			if (hbaoComputeProgram_) {
+				renderManager->DeleteProgram(hbaoComputeProgram_);
+				hbaoComputeProgram_ = nullptr;
+			}
+			if (hbaoComputeShader_) {
+				renderManager->DeleteShader(hbaoComputeShader_);
+				hbaoComputeShader_ = nullptr;
+			}
 		}
 	}
 	hbaoComputeLocData_ = nullptr;
@@ -873,11 +875,13 @@ void PresentationCommon::DestroySSRResources() {
 	}
 
 #if PPSSPP_API(ANY_GL)
-	if (GLRenderManager *rm = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
-		if (depthPyrComputeProgram_) { rm->DeleteProgram(depthPyrComputeProgram_); depthPyrComputeProgram_ = nullptr; }
-		if (depthPyrComputeShader_)  { rm->DeleteShader(depthPyrComputeShader_);   depthPyrComputeShader_  = nullptr; }
-		if (ssrComputeProgram_)      { rm->DeleteProgram(ssrComputeProgram_);       ssrComputeProgram_      = nullptr; }
-		if (ssrComputeShader_)       { rm->DeleteShader(ssrComputeShader_);         ssrComputeShader_       = nullptr; }
+	if (draw_) {
+		if (GLRenderManager *rm = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
+			if (depthPyrComputeProgram_) { rm->DeleteProgram(depthPyrComputeProgram_); depthPyrComputeProgram_ = nullptr; }
+			if (depthPyrComputeShader_)  { rm->DeleteShader(depthPyrComputeShader_);   depthPyrComputeShader_  = nullptr; }
+			if (ssrComputeProgram_)      { rm->DeleteProgram(ssrComputeProgram_);       ssrComputeProgram_      = nullptr; }
+			if (ssrComputeShader_)       { rm->DeleteShader(ssrComputeShader_);         ssrComputeShader_       = nullptr; }
+		}
 	}
 	depthPyrComputeLocData_ = nullptr;
 	ssrComputeLocData_      = nullptr;
