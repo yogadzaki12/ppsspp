@@ -1672,12 +1672,12 @@ uint64_t OpenGLContext::GetNativeObject(NativeObject obj, void *srcObject) {
 		return (uint64_t)(uintptr_t)&renderManager_;
 	case NativeObject::BACKBUFFER_COLOR_TEX:
 	{
-		OpenGLFramebuffer *fb = srcObject ? (OpenGLFramebuffer *)srcObject : (OpenGLFramebuffer *)curRenderTarget_.get();
+		OpenGLFramebuffer *fb = srcObject ? (OpenGLFramebuffer *)srcObject : (OpenGLFramebuffer *)(Framebuffer *)curRenderTarget_;
 		return fb ? (uint64_t)(uintptr_t)&fb->framebuffer_->color_texture : 0;
 	}
 	case NativeObject::BACKBUFFER_DEPTH_TEX:
 	{
-		OpenGLFramebuffer *fb = srcObject ? (OpenGLFramebuffer *)srcObject : (OpenGLFramebuffer *)curRenderTarget_.get();
+		OpenGLFramebuffer *fb = srcObject ? (OpenGLFramebuffer *)srcObject : (OpenGLFramebuffer *)(Framebuffer *)curRenderTarget_;
 		return fb ? (uint64_t)(uintptr_t)&fb->framebuffer_->z_stencil_texture : 0;
 	}
 	case NativeObject::BOUND_TEXTURE0_IMAGEVIEW:
