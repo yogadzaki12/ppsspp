@@ -775,7 +775,7 @@ bool PresentationCommon::RunHBAOCompute() {
 		}
 
 		hbaoComputeShader_ = renderManager->CreateShader(GL_COMPUTE_SHADER, computeSource, "HBAOCompute");
-		auto *locData = new HBAOComputeLocData();
+		auto *locData = new HBAOComputeLocData{};
 		hbaoComputeLocData_ = locData;
 		std::vector<GLRProgram::UniformLocQuery> queries = {
 			{ &locData->colorTexLoc, "colorTex", true },
@@ -791,6 +791,10 @@ bool PresentationCommon::RunHBAOCompute() {
 		hbaoComputeProgram_ = renderManager->CreateProgram({ hbaoComputeShader_ }, {}, queries, initialize, locData, GLRProgramFlags{});
 	}
 
+	if (hbaoComputeShader_ && hbaoComputeShader_->failed) {
+		return false;
+	}
+
 	GLRTexture *colorTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::BACKBUFFER_COLOR_TEX, srcFramebuffer_);
 	GLRTexture *depthTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::BACKBUFFER_DEPTH_TEX, srcFramebuffer_);
 	GLRTexture *outputTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::TEXTURE_VIEW, hbaoTexture_);
@@ -799,6 +803,11 @@ bool PresentationCommon::RunHBAOCompute() {
 	}
 
 	auto *locData = (HBAOComputeLocData *)hbaoComputeLocData_;
+	if (locData->colorTexLoc < 0 || locData->depthTexLoc < 0 || locData->texelDeltaLoc < 0 || locData->radiusLoc < 0 || locData->intensityLoc < 0) {
+		return false;
+	}
+	const float hbaoRadius = std::clamp(g_Config.fPatchHBAORadius, 0.1f, 32.0f);
+	const float hbaoIntensity = std::clamp(g_Config.fPatchHBAOIntensity, 0.0f, 2.0f);
 	const float texelDelta[2] = {
 		srcWidth_ > 0 ? 1.0f / srcWidth_ : 0.0f,
 		srcHeight_ > 0 ? 1.0f / srcHeight_ : 0.0f,
@@ -809,8 +818,8 @@ bool PresentationCommon::RunHBAOCompute() {
 	renderManager->BindTexture(0, colorTex);
 	renderManager->BindTexture(1, depthTex);
 	renderManager->SetUniformF(&locData->texelDeltaLoc, 2, texelDelta);
-	renderManager->SetUniformF1(&locData->radiusLoc, g_Config.fPatchHBAORadius);
-	renderManager->SetUniformF1(&locData->intensityLoc, g_Config.fPatchHBAOIntensity);
+	renderManager->SetUniformF1(&locData->radiusLoc, hbaoRadius);
+	renderManager->SetUniformF1(&locData->intensityLoc, hbaoIntensity);
 	renderManager->DispatchCompute(outputTex, 0, GL_WRITE_ONLY, GL_RGBA8, (srcWidth_ + 7) / 8, (srcHeight_ + 7) / 8, 1, GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 
 	hbaoComputedThisFrame_ = true;
@@ -933,7 +942,7 @@ bool PresentationCommon::RunSSRCompute() {
 			return false;
 		}
 		depthPyrComputeShader_ = rm->CreateShader(GL_COMPUTE_SHADER, src, "DepthPyramid");
-		auto *loc = new DepthPyrComputeLocData();
+		auto *loc = new DepthPyrComputeLocData{};
 		depthPyrComputeLocData_ = loc;
 		std::vector<GLRProgram::UniformLocQuery> queries = {
 			{ &loc->srcTexLoc, "srcTex", true },
@@ -950,7 +959,7 @@ bool PresentationCommon::RunSSRCompute() {
 			return false;
 		}
 		ssrComputeShader_ = rm->CreateShader(GL_COMPUTE_SHADER, src, "SSRCompute");
-		auto *loc = new SSRComputeLocData();
+		auto *loc = new SSRComputeLocData{};
 		ssrComputeLocData_ = loc;
 		std::vector<GLRProgram::UniformLocQuery> queries = {
 			{ &loc->colorTexLoc,   "colorTex",     true },
@@ -973,6 +982,10 @@ bool PresentationCommon::RunSSRCompute() {
 		ssrComputeProgram_ = rm->CreateProgram({ ssrComputeShader_ }, {}, queries, initialize, loc, GLRProgramFlags{});
 	}
 
+	if ((depthPyrComputeShader_ && depthPyrComputeShader_->failed) || (ssrComputeShader_ && ssrComputeShader_->failed)) {
+		return false;
+	}
+
 	// ---- Get native texture handles -----------------------------------------
 	GLRTexture *colorTex  = nullptr;
 	if (hbaoComputedThisFrame_ && hbaoTexture_) {
@@ -991,6 +1004,14 @@ bool PresentationCommon::RunSSRCompute() {
 		return false;
 	}
 	if (!depthPyrComputeLocData_ || !ssrComputeLocData_) {
+		return false;
+	}
+
+	auto *depthLoc = (DepthPyrComputeLocData *)depthPyrComputeLocData_;
+	auto *ssrLoc = (SSRComputeLocData *)ssrComputeLocData_;
+	if (depthLoc->srcTexLoc < 0 ||
+		ssrLoc->colorTexLoc < 0 || ssrLoc->depthMip0Loc < 0 || ssrLoc->depthMip1Loc < 0 || ssrLoc->depthMip2Loc < 0 || ssrLoc->depthMip3Loc < 0 ||
+		ssrLoc->resolutionLoc < 0 || ssrLoc->stepsLoc < 0 || ssrLoc->intensityLoc < 0 || ssrLoc->strideLoc < 0) {
 		return false;
 	}
 
@@ -1021,8 +1042,10 @@ bool PresentationCommon::RunSSRCompute() {
 	rm->DispatchCompute(pyr2, 0, GL_WRITE_ONLY, GL_RGBA8, gW2, gH2, 1, barrier);
 
 	// ---- Pass D: SSR ray march ----------------------------------------------
-	auto *ssrLoc = (SSRComputeLocData *)ssrComputeLocData_;
 	const float resolution[2] = { (float)srcWidth_, (float)srcHeight_ };
+	const int ssrSteps = std::clamp(g_Config.iPatchSSRSteps, 1, 128);
+	const float ssrIntensity = std::clamp(g_Config.fPatchSSRIntensity, 0.0f, 1.0f);
+	const float ssrStride = std::clamp(g_Config.fPatchSSRStride, 0.0001f, 0.25f);
 
 	rm->BeginComputeStep("SSRCompute");
 	rm->BindProgram(ssrComputeProgram_);
@@ -1032,9 +1055,9 @@ bool PresentationCommon::RunSSRCompute() {
 	rm->BindTexture(3, pyr1);
 	rm->BindTexture(4, pyr2);
 	rm->SetUniformF(&ssrLoc->resolutionLoc, 2, resolution);
-	rm->SetUniformI1(&ssrLoc->stepsLoc,      g_Config.iPatchSSRSteps);
-	rm->SetUniformF1(&ssrLoc->intensityLoc,  g_Config.fPatchSSRIntensity);
-	rm->SetUniformF1(&ssrLoc->strideLoc,     g_Config.fPatchSSRStride);
+	rm->SetUniformI1(&ssrLoc->stepsLoc,      ssrSteps);
+	rm->SetUniformF1(&ssrLoc->intensityLoc,  ssrIntensity);
+	rm->SetUniformF1(&ssrLoc->strideLoc,     ssrStride);
 	rm->DispatchCompute(ssrOutTex, 0, GL_WRITE_ONLY, GL_RGBA8,
 	                    (srcWidth_ + 7) / 8, (srcHeight_ + 7) / 8, 1, barrier);
 
