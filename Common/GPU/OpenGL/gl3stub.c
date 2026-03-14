@@ -128,6 +128,9 @@ GLboolean gl3stubInit() {
     FIND_PROC(glTexStorage2D);
     FIND_PROC(glTexStorage3D);
     FIND_PROC(glGetInternalformativ);
+    FIND_PROC(glDispatchCompute);
+    FIND_PROC(glBindImageTexture);
+    FIND_PROC(glMemoryBarrier);
 
     /* EXT_blend_func_extended */
     FIND_PROC(glBindFragDataLocationIndexedEXT);
@@ -361,6 +364,9 @@ GL_APICALL void           (* GL_APIENTRY glInvalidateSubFramebuffer) (GLenum tar
 GL_APICALL void           (* GL_APIENTRY glTexStorage2D) (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
 GL_APICALL void           (* GL_APIENTRY glTexStorage3D) (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth);
 GL_APICALL void           (* GL_APIENTRY glGetInternalformativ) (GLenum target, GLenum internalformat, GLenum pname, GLsizei bufSize, GLint* params);
+GL_APICALL void           (* GL_APIENTRY glDispatchCompute) (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z);
+GL_APICALL void           (* GL_APIENTRY glBindImageTexture) (GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format);
+GL_APICALL void           (* GL_APIENTRY glMemoryBarrier) (GLbitfield barriers);
 
 /* EXT_blend_func_extended */
 GL_APICALL void           (* GL_APIENTRY glBindFragDataLocationIndexedEXT) (GLuint program, GLuint colorNumber, GLuint index, const GLchar *name);

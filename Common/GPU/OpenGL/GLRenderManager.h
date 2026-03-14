@@ -380,6 +380,21 @@ public:
 		return curRenderStep_ && curRenderStep_->stepType == GLRStepType::RENDER;
 	}
 
+	void BeginComputeStep(const char *tag) {
+		_assert_(insideFrame_);
+#ifdef _DEBUG
+		curProgram_ = nullptr;
+#endif
+		GLRStep *step = new GLRStep{ GLRStepType::COMPUTE };
+		step->tag = tag;
+		steps_.push_back(step);
+		curRenderStep_ = step;
+
+		if (invalidationCallback_) {
+			invalidationCallback_(InvalidationCallbackFlags::RENDER_PASS_STATE);
+		}
+	}
+
 	// This starts a new step (like a "render pass" in Vulkan).
 	//
 	// After a "CopyFramebuffer" or the other functions that start "steps", you need to call this before
@@ -464,7 +479,7 @@ public:
 			// This can happen in BlitUsingRaster.
 			return;
 		}
-		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == GLRStepType::RENDER);
+		_dbg_assert_(curRenderStep_ && (curRenderStep_->stepType == GLRStepType::RENDER || curRenderStep_->stepType == GLRStepType::COMPUTE));
 		_dbg_assert_(slot < MAX_GL_TEXTURE_SLOTS);
 		GLRRenderData &data = curRenderStep_->commands.push_uninitialized();
 		data.cmd = GLRRenderCommand::BINDTEXTURE;
@@ -473,7 +488,7 @@ public:
 	}
 
 	void BindProgram(GLRProgram *program) {
-		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == GLRStepType::RENDER);
+		_dbg_assert_(curRenderStep_ && (curRenderStep_->stepType == GLRStepType::RENDER || curRenderStep_->stepType == GLRStepType::COMPUTE));
 		GLRRenderData &data = curRenderStep_->commands.push_uninitialized();
 		data.cmd = GLRRenderCommand::BINDPROGRAM;
 		_dbg_assert_(program != nullptr);
@@ -520,7 +535,7 @@ public:
 	}
 
 	void SetUniformI1(const GLint *loc, int udata) {
-		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == GLRStepType::RENDER);
+		_dbg_assert_(curRenderStep_ && (curRenderStep_->stepType == GLRStepType::RENDER || curRenderStep_->stepType == GLRStepType::COMPUTE));
 #ifdef _DEBUG
 		_dbg_assert_(curProgram_);
 #endif
@@ -559,7 +574,7 @@ public:
 	}
 
 	void SetUniformF(const GLint *loc, int count, const float *udata) {
-		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == GLRStepType::RENDER);
+		_dbg_assert_(curRenderStep_ && (curRenderStep_->stepType == GLRStepType::RENDER || curRenderStep_->stepType == GLRStepType::COMPUTE));
 #ifdef _DEBUG
 		_dbg_assert_(curProgram_);
 #endif
@@ -572,7 +587,7 @@ public:
 	}
 
 	void SetUniformF1(const GLint *loc, const float udata) {
-		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == GLRStepType::RENDER);
+		_dbg_assert_(curRenderStep_ && (curRenderStep_->stepType == GLRStepType::RENDER || curRenderStep_->stepType == GLRStepType::COMPUTE));
 #ifdef _DEBUG
 		_dbg_assert_(curProgram_);
 #endif
@@ -585,7 +600,7 @@ public:
 	}
 
 	void SetUniformF(const char *name, int count, const float *udata) {
-		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == GLRStepType::RENDER);
+		_dbg_assert_(curRenderStep_ && (curRenderStep_->stepType == GLRStepType::RENDER || curRenderStep_->stepType == GLRStepType::COMPUTE));
 #ifdef _DEBUG
 		_dbg_assert_(curProgram_);
 #endif
@@ -633,6 +648,21 @@ public:
 		data.uniformMatrix4.name = name;
 		data.uniformMatrix4.loc = nullptr;
 		memcpy(data.uniformMatrix4.m, udata, sizeof(float) * 16);
+	}
+
+	void DispatchCompute(GLRTexture *texture, int imageUnit, GLenum access, GLenum format, int groupsX, int groupsY, int groupsZ, GLbitfield barrierBits) {
+		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == GLRStepType::COMPUTE);
+		_dbg_assert_(texture != nullptr);
+		GLRRenderData &data = curRenderStep_->commands.push_uninitialized();
+		data.cmd = GLRRenderCommand::DISPATCH_COMPUTE;
+		data.dispatch_compute.texture = texture;
+		data.dispatch_compute.imageUnit = (uint8_t)imageUnit;
+		data.dispatch_compute.groupsX = (uint16_t)groupsX;
+		data.dispatch_compute.groupsY = (uint16_t)groupsY;
+		data.dispatch_compute.groupsZ = (uint16_t)groupsZ;
+		data.dispatch_compute.access = access;
+		data.dispatch_compute.format = format;
+		data.dispatch_compute.barrierBits = barrierBits;
 	}
 
 	void SetBlendAndMask(int colorMask, bool blendEnabled, GLenum srcColor, GLenum dstColor, GLenum srcAlpha, GLenum dstAlpha, GLenum funcColor, GLenum funcAlpha) {

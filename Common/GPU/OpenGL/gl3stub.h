@@ -379,6 +379,22 @@ typedef struct __GLsync *GLsync;
 #define GL_NUM_SAMPLE_COUNTS                             0x9380
 #define GL_TEXTURE_IMMUTABLE_LEVELS                      0x82DF
 
+/* OpenGL ES 3.1 */
+
+#define GL_COMPUTE_SHADER                                0x91B9
+#define GL_MAX_COMPUTE_UNIFORM_BLOCKS                    0x91BB
+#define GL_MAX_COMPUTE_TEXTURE_IMAGE_UNITS               0x91BC
+#define GL_MAX_COMPUTE_IMAGE_UNIFORMS                    0x91BD
+#define GL_MAX_COMPUTE_WORK_GROUP_COUNT                  0x91BE
+#define GL_MAX_COMPUTE_WORK_GROUP_SIZE                   0x91BF
+#define GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS            0x90EB
+#define GL_DISPATCH_INDIRECT_BUFFER                      0x90EE
+#define GL_DISPATCH_INDIRECT_BUFFER_BINDING              0x90EF
+#define GL_COMPUTE_SHADER_BIT                            0x00000020
+#define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT               0x00000020
+#define GL_TEXTURE_FETCH_BARRIER_BIT                     0x00000008
+#define GL_WRITE_ONLY                                    0x88B9
+
 /* EXT_blend_func_extended */
 
 #define GL_SRC1_COLOR_EXT                                0x88F9
@@ -499,6 +515,9 @@ extern GL_APICALL void           (* GL_APIENTRY glInvalidateSubFramebuffer) (GLe
 extern GL_APICALL void           (* GL_APIENTRY glTexStorage2D) (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
 extern GL_APICALL void           (* GL_APIENTRY glTexStorage3D) (GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth);
 extern GL_APICALL void           (* GL_APIENTRY glGetInternalformativ) (GLenum target, GLenum internalformat, GLenum pname, GLsizei bufSize, GLint* params);
+extern GL_APICALL void           (* GL_APIENTRY glDispatchCompute) (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z);
+extern GL_APICALL void           (* GL_APIENTRY glBindImageTexture) (GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format);
+extern GL_APICALL void           (* GL_APIENTRY glMemoryBarrier) (GLbitfield barriers);
 
 /* EXT_blend_func_extended */
 extern GL_APICALL void           (* GL_APIENTRY glBindFragDataLocationIndexedEXT) (GLuint program, GLuint colorNumber, GLuint index, const GLchar *name);

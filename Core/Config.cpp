@@ -817,6 +817,9 @@ static const ConfigSetting graphicsSettings[] = {
 	ConfigSetting("SplineBezierQuality", SETTING(g_Config, iSplineBezierQuality), 2, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("HardwareTessellation", SETTING(g_Config, bHardwareTessellation), false, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("TextureShader", SETTING(g_Config, sTextureShaderName), "Off", CfgFlag::PER_GAME),
+	ConfigSetting("PatchHBAOEnabled", SETTING(g_Config, bPatchHBAOEnabled), false, CfgFlag::PER_GAME),
+	ConfigSetting("PatchHBAORadius", SETTING(g_Config, fPatchHBAORadius), 5.0f, CfgFlag::PER_GAME),
+	ConfigSetting("PatchHBAOIntensity", SETTING(g_Config, fPatchHBAOIntensity), 1.5f, CfgFlag::PER_GAME),
 	ConfigSetting("ShaderChainRequires60FPS", SETTING(g_Config, bShaderChainRequires60FPS), false, CfgFlag::PER_GAME),
 
 	ConfigSetting("SkipGPUReadbackMode", SETTING(g_Config, iSkipGPUReadbackMode), false, CfgFlag::PER_GAME | CfgFlag::REPORT),

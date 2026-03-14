@@ -65,6 +65,11 @@ class ShaderModule;
 class Texture;
 }
 
+#if PPSSPP_API(ANY_GL)
+class GLRProgram;
+class GLRShader;
+#endif
+
 struct ShaderInfo;
 class TextureCacheCommon;
 
@@ -154,6 +159,9 @@ protected:
 
 	void GetCardboardSettings(const DisplayLayoutConfig &config, CardboardSettings *cardboardSettings) const;
 	void CalculatePostShaderUniforms(int bufferWidth, int bufferHeight, int targetWidth, int targetHeight, const ShaderInfo *shaderInfo, PostShaderUniforms *uniforms) const;
+	bool RunHBAOCompute();
+	bool EnsureHBAOTexture(int width, int height);
+	void DestroyHBAOResources();
 
 	Draw::DrawContext *draw_;
 	Draw::Pipeline *texColor_ = nullptr;
@@ -175,8 +183,13 @@ protected:
 
 	Draw::Texture *srcTexture_ = nullptr;
 	Draw::Framebuffer *srcFramebuffer_ = nullptr;
+	Draw::Texture *hbaoTexture_ = nullptr;
+	bool srcHasDepth_ = false;
+	bool hbaoComputedThisFrame_ = false;
 	int srcWidth_ = 0;
 	int srcHeight_ = 0;
+	int hbaoWidth_ = 0;
+	int hbaoHeight_ = 0;
 	bool hasVideo_ = false;
 
 	int pixelWidth_ = 0;
@@ -200,4 +213,10 @@ protected:
 	Draw::Framebuffer *postShaderOutput_ = nullptr;
 	FRect rc_;
 	OutputFlags outputFlags_ = OutputFlags::DEFAULT;
+
+#if PPSSPP_API(ANY_GL)
+	GLRShader *hbaoComputeShader_ = nullptr;
+	GLRProgram *hbaoComputeProgram_ = nullptr;
+	void *hbaoComputeLocData_ = nullptr;
+#endif
 };

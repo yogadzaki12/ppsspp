@@ -105,6 +105,7 @@ private:
 	bool enableReports_ = false;
 	bool enableReportsSet_ = false;
 	bool analogSpeedMapped_ = false;
+	bool patchHBAOEnabled_ = false;
 
 	// edit the game-specific settings and restore the global settings after exiting
 	bool editGameSpecificThenRestore_ = false;

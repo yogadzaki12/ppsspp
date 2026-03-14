@@ -380,6 +380,9 @@ public:
 
 	bool bShaderChainRequires60FPS;
 	std::string sTextureShaderName;
+	bool bPatchHBAOEnabled;
+	float fPatchHBAORadius;
+	float fPatchHBAOIntensity;
 	bool bGfxDebugOutput;
 	int iInflightFrames;
 	bool bRenderDuplicateFrames;

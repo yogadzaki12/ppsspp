@@ -19,12 +19,14 @@
 #include <cmath>
 #include <set>
 #include <cstdint>
+#include <memory>
 #include "Common/GPU/thin3d.h"
 
 #include "Common/System/Display.h"
 #include "Common/System/System.h"
 #include "Common/System/OSD.h"
 #include "Common/File/VFS/VFS.h"
+#include "Common/File/FileUtil.h"
 #include "Common/VR/PPSSPPVR.h"
 #include "Common/Math/geom2d.h"
 #include "Common/Log.h"
@@ -38,11 +40,38 @@
 #include "GPU/GPUState.h"
 #include "Common/GPU/ShaderTranslation.h"
 
+#if PPSSPP_API(ANY_GL)
+#include "Common/GPU/OpenGL/GLFeatures.h"
+#include "Common/GPU/OpenGL/GLRenderManager.h"
+#endif
+
 struct Vertex {
 	float x, y, z;
 	float u, v;
 	uint32_t rgba;
 };
+
+#if PPSSPP_API(ANY_GL)
+struct HBAOComputeLocData : public GLRProgramLocData {
+	GLint colorTexLoc = -1;
+	GLint depthTexLoc = -1;
+	GLint texelDeltaLoc = -1;
+	GLint radiusLoc = -1;
+	GLint intensityLoc = -1;
+};
+#endif
+
+static bool LoadAssetShaderSource(const char *name, std::string *source) {
+	const std::string shaderPath = std::string("shaders/") + name;
+	if (uint8_t *data = g_VFS.ReadFile(shaderPath, nullptr)) {
+		source->assign((const char *)data);
+		delete [] data;
+		return true;
+	}
+
+	const Path assetPath = Path("assets") / "shaders" / name;
+	return File::ReadTextFileToString(assetPath, source);
+}
 
 static bool g_overrideScreenBounds;
 static Bounds g_screenBounds;
@@ -539,6 +568,7 @@ void PresentationCommon::CreateDeviceObjects() {
 
 	texColor_ = CreatePipeline({ draw_->GetVshaderPreset(VS_TEXTURE_COLOR_2D), draw_->GetFshaderPreset(FS_TEXTURE_COLOR_2D) }, false, &vsTexColBufDesc);
 	texColorRBSwizzle_ = CreatePipeline({ draw_->GetVshaderPreset(VS_TEXTURE_COLOR_2D), draw_->GetFshaderPreset(FS_TEXTURE_COLOR_2D_RB_SWIZZLE) }, false, &vsTexColBufDesc);
+	hbaoComputedThisFrame_ = false;
 
 	restorePostShader_ = false;
 }
@@ -565,6 +595,7 @@ void PresentationCommon::DestroyDeviceObjects() {
 	DoRelease(vdata_);
 	DoRelease(srcTexture_);
 	DoRelease(srcFramebuffer_);
+	DestroyHBAOResources();
 
 	restorePostShader_ = usePostShader_;
 	DestroyPostShader();
@@ -602,6 +633,8 @@ Draw::ShaderModule *PresentationCommon::CompileShaderModule(ShaderStage stage, S
 void PresentationCommon::SourceBlank() {
 	DoRelease(srcTexture_);
 	DoRelease(srcFramebuffer_);
+	srcHasDepth_ = false;
+	hbaoComputedThisFrame_ = false;
 
 	srcWidth_ = 0;
 	srcHeight_ = 0;
@@ -616,6 +649,8 @@ void PresentationCommon::SourceTexture(Draw::Texture *texture, int bufferWidth, 
 	DoRelease(srcFramebuffer_);
 
 	srcTexture_ = texture;
+	srcHasDepth_ = false;
+	hbaoComputedThisFrame_ = false;
 	srcWidth_ = bufferWidth;
 	srcHeight_ = bufferHeight;
 }
@@ -627,8 +662,134 @@ void PresentationCommon::SourceFramebuffer(Draw::Framebuffer *fb, int bufferWidt
 	DoRelease(srcFramebuffer_);
 
 	srcFramebuffer_ = fb;
+	srcHasDepth_ = draw_->GetDeviceCaps().textureDepthSupported;
+	hbaoComputedThisFrame_ = false;
 	srcWidth_ = bufferWidth;
 	srcHeight_ = bufferHeight;
+}
+
+bool PresentationCommon::EnsureHBAOTexture(int width, int height) {
+	if (hbaoTexture_ && hbaoWidth_ == width && hbaoHeight_ == height) {
+		return true;
+	}
+
+	DoRelease(hbaoTexture_);
+	hbaoWidth_ = 0;
+	hbaoHeight_ = 0;
+
+	Draw::TextureDesc desc{};
+	desc.type = Draw::TextureType::LINEAR2D;
+	desc.format = Draw::DataFormat::R8G8B8A8_UNORM;
+	desc.width = width;
+	desc.height = height;
+	desc.depth = 1;
+	desc.mipLevels = 1;
+	desc.generateMips = false;
+	desc.swizzle = Draw::TextureSwizzle::DEFAULT;
+	desc.tag = "HBAOColor";
+	hbaoTexture_ = draw_->CreateTexture(desc);
+	if (!hbaoTexture_) {
+		return false;
+	}
+	hbaoWidth_ = width;
+	hbaoHeight_ = height;
+	return true;
+}
+
+void PresentationCommon::DestroyHBAOResources() {
+	hbaoComputedThisFrame_ = false;
+	hbaoWidth_ = 0;
+	hbaoHeight_ = 0;
+	DoRelease(hbaoTexture_);
+
+#if PPSSPP_API(ANY_GL)
+	if (GLRenderManager *renderManager = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
+		if (hbaoComputeProgram_) {
+			renderManager->DeleteProgram(hbaoComputeProgram_);
+			hbaoComputeProgram_ = nullptr;
+		}
+		if (hbaoComputeShader_) {
+			renderManager->DeleteShader(hbaoComputeShader_);
+			hbaoComputeShader_ = nullptr;
+		}
+	}
+	hbaoComputeLocData_ = nullptr;
+#endif
+}
+
+bool PresentationCommon::RunHBAOCompute() {
+	hbaoComputedThisFrame_ = false;
+
+	if (!g_Config.bPatchHBAOEnabled || !srcFramebuffer_ || !srcHasDepth_ || (outputFlags_ & OutputFlags::RB_SWIZZLE)) {
+		return false;
+	}
+
+#if !PPSSPP_API(ANY_GL)
+	return false;
+#elif PPSSPP_PLATFORM(IOS)
+	return false;
+#else
+	if (!gl_extensions.IsGLES || !gl_extensions.VersionGEThan(3, 1)) {
+		return false;
+	}
+
+	GLRenderManager *renderManager = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
+	if (!renderManager) {
+		return false;
+	}
+
+	if (!EnsureHBAOTexture(srcWidth_, srcHeight_)) {
+		return false;
+	}
+
+	if (!hbaoComputeProgram_) {
+		std::string computeSource;
+		if (!LoadAssetShaderSource("hbao.csh", &computeSource)) {
+			return false;
+		}
+
+		hbaoComputeShader_ = renderManager->CreateShader(GL_COMPUTE_SHADER, computeSource, "HBAOCompute");
+		auto *locData = new HBAOComputeLocData();
+		hbaoComputeLocData_ = locData;
+		std::vector<GLRProgram::UniformLocQuery> queries = {
+			{ &locData->colorTexLoc, "colorTex", true },
+			{ &locData->depthTexLoc, "depthTex", true },
+			{ &locData->texelDeltaLoc, "u_texelDelta", true },
+			{ &locData->radiusLoc, "radius", true },
+			{ &locData->intensityLoc, "intensity", true },
+		};
+		std::vector<GLRProgram::Initializer> initialize = {
+			{ &locData->colorTexLoc, 0, 0 },
+			{ &locData->depthTexLoc, 0, 1 },
+		};
+		hbaoComputeProgram_ = renderManager->CreateProgram({ hbaoComputeShader_ }, {}, queries, initialize, locData, GLRProgramFlags{});
+	}
+
+	GLRTexture *colorTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::BACKBUFFER_COLOR_TEX, srcFramebuffer_);
+	GLRTexture *depthTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::BACKBUFFER_DEPTH_TEX, srcFramebuffer_);
+	GLRTexture *outputTex = (GLRTexture *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::TEXTURE_VIEW, hbaoTexture_);
+	if (!colorTex || !depthTex || !outputTex || !hbaoComputeLocData_) {
+		return false;
+	}
+
+	auto *locData = (HBAOComputeLocData *)hbaoComputeLocData_;
+	const float texelDelta[2] = {
+		srcWidth_ > 0 ? 1.0f / srcWidth_ : 0.0f,
+		srcHeight_ > 0 ? 1.0f / srcHeight_ : 0.0f,
+	};
+
+	renderManager->BeginComputeStep("HBAOCompute");
+	renderManager->BindProgram(hbaoComputeProgram_);
+	renderManager->BindTexture(0, colorTex);
+	renderManager->BindTexture(1, depthTex);
+	renderManager->SetUniformF(&locData->texelDeltaLoc, 2, texelDelta);
+	renderManager->SetUniformF1(&locData->radiusLoc, g_Config.fPatchHBAORadius);
+	renderManager->SetUniformF1(&locData->intensityLoc, g_Config.fPatchHBAOIntensity);
+	renderManager->DispatchCompute(outputTex, 0, GL_WRITE_ONLY, GL_RGBA8, (srcWidth_ + 7) / 8, (srcHeight_ + 7) / 8, 1, GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+
+	hbaoComputedThisFrame_ = true;
+	return true;
+#endif
 }
 
 // Return value is if stereo binding succeeded.
@@ -647,7 +808,11 @@ bool PresentationCommon::BindSource(int binding, bool bindStereo) {
 				return false;
 			}
 		} else {
-			draw_->BindFramebufferAsTexture(srcFramebuffer_, binding, Draw::Aspect::COLOR_BIT, 0);
+			if (binding == 1 && srcHasDepth_) {
+				draw_->BindFramebufferAsTexture(srcFramebuffer_, binding, Draw::Aspect::DEPTH_BIT, 0);
+			} else {
+				draw_->BindFramebufferAsTexture(srcFramebuffer_, binding, Draw::Aspect::COLOR_BIT, 0);
+			}
 			return false;
 		}
 	} else {
@@ -665,6 +830,7 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 
 	postShaderOutput_ = nullptr;
 	outputFlags_ = flags;
+	RunHBAOCompute();
 
 	// TODO: If shader objects have been created by now, we might have received errors.
 	// GLES can have the shader fail later, shader->failed / shader->error.
@@ -793,6 +959,8 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 	const auto performShaderPass = [&](const ShaderInfo *shaderInfo, Draw::Framebuffer *postShaderFramebuffer, Draw::Pipeline *postShaderPipeline, int vertsOffset) {
 		if (postShaderOutput_) {
 			draw_->BindFramebufferAsTexture(postShaderOutput_, 0, Draw::Aspect::COLOR_BIT, 0);
+		} else if (hbaoComputedThisFrame_) {
+			draw_->BindTexture(0, hbaoTexture_);
 		} else {
 			BindSource(0, false);
 		}
@@ -815,6 +983,7 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 		Draw::SamplerState *sampler = useNearest || shaderInfo->isUpscalingFilter ? samplerNearest_ : samplerLinear_;
 		draw_->BindSamplerStates(0, 1, &sampler);
 		draw_->BindSamplerStates(1, 1, &sampler);
+		draw_->BindSamplerStates(2, 1, &sampler);
 		if (shaderInfo->usePreviousFrame)
 			draw_->BindSamplerStates(2, 1, &sampler);
 
@@ -923,6 +1092,8 @@ void PresentationCommon::CopyToOutput(const DisplayLayoutConfig &config) {
 		draw_->BindPipeline(pipeline);
 		if (postShaderOutput_) {
 			draw_->BindFramebufferAsTexture(postShaderOutput_, 0, Draw::Aspect::COLOR_BIT, 0);
+		} else if (hbaoComputedThisFrame_) {
+			draw_->BindTexture(0, hbaoTexture_);
 		} else {
 			BindSource(0, false);
 		}
@@ -949,6 +1120,7 @@ void PresentationCommon::CopyToOutput(const DisplayLayoutConfig &config) {
 	Draw::SamplerState *sampler = useNearest ? samplerNearest_ : samplerLinear_;
 	draw_->BindSamplerStates(0, 1, &sampler);
 	draw_->BindSamplerStates(1, 1, &sampler);
+	draw_->BindSamplerStates(2, 1, &sampler);
 
 	auto setViewport = [&](float x, float y, float w, float h) {
 		Draw::Viewport viewport{ x, y, w, h, 0.0f, 1.0f };

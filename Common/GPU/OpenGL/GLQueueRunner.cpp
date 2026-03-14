@@ -687,6 +687,9 @@ void GLQueueRunner::RunSteps(const std::vector<GLRStep *> &steps, GLFrameData &f
 				PerformRenderPass(step, renderCount == 1, renderCount == totalRenderCount, frameData.profile);
 			}
 			break;
+		case GLRStepType::COMPUTE:
+			PerformCompute(step);
+			break;
 		case GLRStepType::COPY:
 			PerformCopy(step);
 			break;
@@ -719,6 +722,98 @@ void GLQueueRunner::RunSteps(const std::vector<GLRStep *> &steps, GLFrameData &f
 	}
 
 	CHECK_GL_ERROR_IF_DEBUG();
+}
+
+void GLQueueRunner::PerformCompute(const GLRStep &step) {
+#if PPSSPP_PLATFORM(IOS)
+	(void)step;
+	Crash();
+#else
+	GLRProgram *curProgram = nullptr;
+	GLint activeSlot = -1;
+	const GLRTexture *curTex[MAX_GL_TEXTURE_SLOTS]{};
+
+	for (const auto &c : step.commands) {
+		switch (c.cmd) {
+		case GLRRenderCommand::BINDTEXTURE:
+		{
+			GLint slot = c.texture.slot;
+			if (slot != activeSlot) {
+				glActiveTexture(GL_TEXTURE0 + slot);
+				activeSlot = slot;
+			}
+			if (c.texture.texture) {
+				if (curTex[slot] != c.texture.texture) {
+					glBindTexture(c.texture.texture->target, c.texture.texture->texture);
+					curTex[slot] = c.texture.texture;
+				}
+			} else {
+				glBindTexture(GL_TEXTURE_2D, 0);
+				curTex[slot] = nullptr;
+			}
+			CHECK_GL_ERROR_IF_DEBUG();
+			break;
+		}
+		case GLRRenderCommand::BINDPROGRAM:
+			if (curProgram != c.program.program) {
+				glUseProgram(c.program.program->program);
+				curProgram = c.program.program;
+			}
+			CHECK_GL_ERROR_IF_DEBUG();
+			break;
+		case GLRRenderCommand::UNIFORM4F:
+		{
+			_dbg_assert_(curProgram);
+			int loc = c.uniform4.loc ? *c.uniform4.loc : -1;
+			if (c.uniform4.name) {
+				loc = curProgram->GetUniformLoc(c.uniform4.name);
+			}
+			if (loc >= 0) {
+				switch (c.uniform4.count) {
+				case 1: glUniform1fv(loc, 1, c.uniform4.v); break;
+				case 2: glUniform2fv(loc, 1, c.uniform4.v); break;
+				case 3: glUniform3fv(loc, 1, c.uniform4.v); break;
+				case 4: glUniform4fv(loc, 1, c.uniform4.v); break;
+				}
+			}
+			CHECK_GL_ERROR_IF_DEBUG();
+			break;
+		}
+		case GLRRenderCommand::UNIFORM4I:
+		{
+			_dbg_assert_(curProgram);
+			int loc = c.uniform4.loc ? *c.uniform4.loc : -1;
+			if (c.uniform4.name) {
+				loc = curProgram->GetUniformLoc(c.uniform4.name);
+			}
+			if (loc >= 0) {
+				switch (c.uniform4.count) {
+				case 1: glUniform1iv(loc, 1, (GLint *)c.uniform4.v); break;
+				case 2: glUniform2iv(loc, 1, (GLint *)c.uniform4.v); break;
+				case 3: glUniform3iv(loc, 1, (GLint *)c.uniform4.v); break;
+				case 4: glUniform4iv(loc, 1, (GLint *)c.uniform4.v); break;
+				}
+			}
+			CHECK_GL_ERROR_IF_DEBUG();
+			break;
+		}
+		case GLRRenderCommand::DISPATCH_COMPUTE:
+			glBindImageTexture(c.dispatch_compute.imageUnit, c.dispatch_compute.texture->texture, 0, GL_FALSE, 0, c.dispatch_compute.access, c.dispatch_compute.format);
+			glDispatchCompute(c.dispatch_compute.groupsX, c.dispatch_compute.groupsY, c.dispatch_compute.groupsZ);
+			glMemoryBarrier(c.dispatch_compute.barrierBits);
+			CHECK_GL_ERROR_IF_DEBUG();
+			break;
+		default:
+			Crash();
+			break;
+		}
+	}
+
+	if (curProgram) {
+		glUseProgram(0);
+	}
+	CHECK_GL_ERROR_IF_DEBUG();
+#endif
 }
 
 void GLQueueRunner::PerformBlit(const GLRStep &step) {
@@ -1823,6 +1918,9 @@ std::string GLQueueRunner::StepToString(const GLRStep &step) const {
 		snprintf(buffer, sizeof(buffer), "RENDER %s %s (commands: %d, %dx%d)\n", step.tag, step.render.framebuffer ? step.render.framebuffer->Tag() : "", (int)step.commands.size(), w, h);
 		break;
 	}
+	case GLRStepType::COMPUTE:
+		snprintf(buffer, sizeof(buffer), "COMPUTE '%s' (commands: %d)\n", step.tag, (int)step.commands.size());
+		break;
 	case GLRStepType::COPY:
 		snprintf(buffer, sizeof(buffer), "COPY '%s' %s -> %s (%dx%d, %s)\n", step.tag, step.copy.src->Tag(), step.copy.dst->Tag(), step.copy.srcRect.w, step.copy.srcRect.h, GLRAspectToString((GLRAspect)step.copy.aspectMask));
 		break;
@@ -1880,6 +1978,7 @@ const char *RenderCommandToString(GLRRenderCommand cmd) {
 	case GLRRenderCommand::GENMIPS: return "GENMIPS";
 	case GLRRenderCommand::DRAW: return "DRAW";
 	case GLRRenderCommand::TEXTURE_SUBIMAGE: return "TEXTURE_SUBIMAGE";
+	case GLRRenderCommand::DISPATCH_COMPUTE: return "DISPATCH_COMPUTE";
 	default: return "N/A";
 	}
 }

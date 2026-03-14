@@ -601,6 +601,28 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 		textureShaderChoice->SetDisabledPtr(&g_Config.bSoftwareRendering);
 	}
 
+	graphicsSettings->Add(new ItemHeader(gr->T("Patch")));
+	patchHBAOEnabled_ = g_Config.bPatchHBAOEnabled;
+	CheckBox *hbaoPatch = graphicsSettings->Add(new CheckBox(&patchHBAOEnabled_, gr->T("Enable HBAO Patch")));
+	hbaoPatch->SetEnabledFunc([]() {
+		return !g_Config.bSoftwareRendering;
+	});
+	hbaoPatch->OnClick.Add([this](UI::EventParams &) {
+		g_Config.bPatchHBAOEnabled = patchHBAOEnabled_;
+		System_PostUIMessage(UIMessage::GPU_CONFIG_CHANGED);
+	});
+
+	PopupSliderChoiceFloat *hbaoRadius = graphicsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fPatchHBAORadius, 0.5f, 16.0f, 5.0f, gr->T("HBAO Radius"), 0.1f, screenManager()));
+	hbaoRadius->SetEnabledFunc([this]() {
+		return !g_Config.bSoftwareRendering && patchHBAOEnabled_;
+	});
+	hbaoRadius->SetLiveUpdate(true);
+	PopupSliderChoiceFloat *hbaoIntensity = graphicsSettings->Add(new PopupSliderChoiceFloat(&g_Config.fPatchHBAOIntensity, 0.0f, 4.0f, 1.5f, gr->T("HBAO Intensity"), 0.05f, screenManager()));
+	hbaoIntensity->SetEnabledFunc([this]() {
+		return !g_Config.bSoftwareRendering && patchHBAOEnabled_;
+	});
+	hbaoIntensity->SetLiveUpdate(true);
+
 #ifndef MOBILE_DEVICE
 	static const char *texScaleLevels[] = {"Off", "2x", "3x", "4x", "5x"};
 #else

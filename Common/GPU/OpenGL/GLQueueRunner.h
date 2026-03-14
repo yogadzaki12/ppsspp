@@ -63,6 +63,7 @@ enum class GLRRenderCommand : uint8_t {
 	GENMIPS,
 	DRAW,
 	TEXTURE_SUBIMAGE,
+	DISPATCH_COMPUTE,
 };
 
 // TODO: Bloated since the biggest struct decides the size. Will need something more efficient (separate structs with shared
@@ -164,6 +165,16 @@ struct GLRRenderData {
 			int slot;
 			int aspect;
 		} bind_fb_texture;
+		struct {
+			GLRTexture *texture;
+			uint16_t groupsX;
+			uint16_t groupsY;
+			uint16_t groupsZ;
+			uint8_t imageUnit;
+			GLenum access;
+			GLenum format;
+			GLbitfield barrierBits;
+		} dispatch_compute;
 		struct {
 			GLRBuffer *buffer;
 			GLuint target;
@@ -275,6 +286,7 @@ struct GLRInitStep {
 
 enum class GLRStepType : uint8_t {
 	RENDER,
+	COMPUTE,
 	COPY,
 	BLIT,
 	READBACK,
@@ -377,6 +389,7 @@ private:
 
 	void PerformBindFramebufferAsRenderTarget(const GLRStep &pass);
 	void PerformRenderPass(const GLRStep &pass, bool first, bool last, GLQueueProfileContext &profile);
+	void PerformCompute(const GLRStep &step);
 	void PerformCopy(const GLRStep &pass);
 	void PerformBlit(const GLRStep &pass);
 	void PerformReadback(const GLRStep &pass);
