@@ -688,6 +688,10 @@ void PresentationCommon::SourceFramebuffer(Draw::Framebuffer *fb, int bufferWidt
 }
 
 bool PresentationCommon::EnsureHBAOTexture(int width, int height) {
+	if (width <= 0 || height <= 0) {
+		return false;
+	}
+
 	if (hbaoTexture_ && hbaoWidth_ == width && hbaoHeight_ == height) {
 		return true;
 	}
@@ -726,14 +730,14 @@ void PresentationCommon::DestroyHBAOResources() {
 		if (GLRenderManager *renderManager = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
 			if (hbaoComputeProgram_) {
 				renderManager->DeleteProgram(hbaoComputeProgram_);
-				hbaoComputeProgram_ = nullptr;
 			}
 			if (hbaoComputeShader_) {
 				renderManager->DeleteShader(hbaoComputeShader_);
-				hbaoComputeShader_ = nullptr;
 			}
 		}
 	}
+	hbaoComputeProgram_ = nullptr;
+	hbaoComputeShader_ = nullptr;
 	hbaoComputeLocData_ = nullptr;
 #endif
 }
@@ -741,7 +745,7 @@ void PresentationCommon::DestroyHBAOResources() {
 bool PresentationCommon::RunHBAOCompute() {
 	hbaoComputedThisFrame_ = false;
 
-	if (!g_Config.bPatchHBAOEnabled || !srcFramebuffer_ || !srcHasDepth_ || (outputFlags_ & OutputFlags::RB_SWIZZLE)) {
+	if (!draw_ || !g_Config.bPatchHBAOEnabled || !srcFramebuffer_ || !srcHasDepth_ || srcWidth_ <= 0 || srcHeight_ <= 0 || (outputFlags_ & OutputFlags::RB_SWIZZLE)) {
 		return false;
 	}
 
@@ -818,6 +822,10 @@ bool PresentationCommon::RunHBAOCompute() {
 // ---------------------------------------------------------------------------
 
 bool PresentationCommon::EnsureSSRTextures(int width, int height) {
+	if (width <= 0 || height <= 0) {
+		return false;
+	}
+
 	// Check if already valid
 	if (ssrOutputTex_ && ssrWidth_ == width && ssrHeight_ == height) {
 		return true;
@@ -877,12 +885,16 @@ void PresentationCommon::DestroySSRResources() {
 #if PPSSPP_API(ANY_GL)
 	if (draw_) {
 		if (GLRenderManager *rm = (GLRenderManager *)(uintptr_t)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER)) {
-			if (depthPyrComputeProgram_) { rm->DeleteProgram(depthPyrComputeProgram_); depthPyrComputeProgram_ = nullptr; }
-			if (depthPyrComputeShader_)  { rm->DeleteShader(depthPyrComputeShader_);   depthPyrComputeShader_  = nullptr; }
-			if (ssrComputeProgram_)      { rm->DeleteProgram(ssrComputeProgram_);       ssrComputeProgram_      = nullptr; }
-			if (ssrComputeShader_)       { rm->DeleteShader(ssrComputeShader_);         ssrComputeShader_       = nullptr; }
+			if (depthPyrComputeProgram_) { rm->DeleteProgram(depthPyrComputeProgram_); }
+			if (depthPyrComputeShader_)  { rm->DeleteShader(depthPyrComputeShader_); }
+			if (ssrComputeProgram_)      { rm->DeleteProgram(ssrComputeProgram_); }
+			if (ssrComputeShader_)       { rm->DeleteShader(ssrComputeShader_); }
 		}
 	}
+	depthPyrComputeProgram_ = nullptr;
+	depthPyrComputeShader_ = nullptr;
+	ssrComputeProgram_ = nullptr;
+	ssrComputeShader_ = nullptr;
 	depthPyrComputeLocData_ = nullptr;
 	ssrComputeLocData_      = nullptr;
 #endif
@@ -891,7 +903,7 @@ void PresentationCommon::DestroySSRResources() {
 bool PresentationCommon::RunSSRCompute() {
 	ssrComputedThisFrame_ = false;
 
-	if (!g_Config.bPatchSSREnabled || !srcFramebuffer_ || !srcHasDepth_ || (outputFlags_ & OutputFlags::RB_SWIZZLE)) {
+	if (!draw_ || !g_Config.bPatchSSREnabled || !srcFramebuffer_ || !srcHasDepth_ || srcWidth_ <= 0 || srcHeight_ <= 0 || (outputFlags_ & OutputFlags::RB_SWIZZLE)) {
 		return false;
 	}
 
