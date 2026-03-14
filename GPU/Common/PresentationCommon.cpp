@@ -79,8 +79,9 @@ struct SSRComputeLocData : public GLRProgramLocData {
 
 static bool LoadAssetShaderSource(const char *name, std::string *source) {
 	const std::string shaderPath = std::string("shaders/") + name;
-	if (uint8_t *data = g_VFS.ReadFile(shaderPath, nullptr)) {
-		source->assign((const char *)data);
+	size_t size = 0;
+	if (uint8_t *data = g_VFS.ReadFile(shaderPath, &size)) {
+		source->assign((const char *)data, size);
 		delete [] data;
 		return true;
 	}
