@@ -32,10 +32,14 @@ class ControlMapper;
 class GamepadEmuView : public UI::AnchorLayout {
 public:
 	GamepadEmuView(const TouchControlConfig &config, float xres, float yres, bool *pause, ControlMapper *controlMapper, UI::LayoutParams *layoutParams);
+	bool Touch(const TouchInput &input) override;
 	void Update() override;
 
 private:
 	bool emotionButtonDown_ = false;
+	UI::LinearLayout *emotionList_ = nullptr;
+	ControlMapper *controlMapper_ = nullptr;
+	uint64_t emotionPendingReleaseMask_ = 0;
 };
 
 class GamepadComponent : public UI::View {

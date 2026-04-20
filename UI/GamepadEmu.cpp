@@ -1041,6 +1041,8 @@ UI::ViewGroup *CreatePadLayout(const TouchControlConfig &config, float xres, flo
 GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, float yres, bool *pause, ControlMapper *controlMapper, UI::LayoutParams *layoutParams)
 	: UI::AnchorLayout(layoutParams)
 {
+	controlMapper_ = controlMapper;
+
 	if (!g_Config.bShowTouchControls) {
 		return;
 	}
@@ -1130,26 +1132,25 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		});
 	}
 
-	LinearLayout *emotionList = nullptr;
 	if (config.touchEmotionKey.show) {
 		auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
 		BoolButton *emotionButton = addBoolButton(&emotionButtonDown_, "Emotion button", rectImage, ImageID("I_RECT"), ImageID("I_THREE_DOTS"), config.touchEmotionKey);
-		emotionList = Add(new LinearLayout(ORIENT_VERTICAL, new AnchorLayoutParams(
+		emotionList_ = Add(new LinearLayout(ORIENT_VERTICAL, new AnchorLayoutParams(
 			config.touchEmotionKey.x * xres,
 			config.touchEmotionKey.y * yres - 170.0f * config.touchEmotionKey.scale,
 			NONE,
 			NONE,
 			Centering::Both)));
-		emotionList->SetBG(Drawable(0xC0202020));
-		emotionList->SetVisibility(V_GONE);
-		emotionList->SetSpacing(2.0f);
+		emotionList_->SetBG(Drawable(0xC0202020));
+		emotionList_->SetVisibility(V_GONE);
+		emotionList_->SetSpacing(2.0f);
 
-		auto triggerEmotion = [controlMapper](uint64_t mask) {
+		auto triggerEmotion = [this](uint64_t mask) {
 			using namespace CustomKeyData;
 			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
 				if (mask & (1ULL << i)) {
-					controlMapper->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::DOWN);
-					controlMapper->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::UP);
+					controlMapper_->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::DOWN);
+					emotionPendingReleaseMask_ |= (1ULL << i);
 				}
 			}
 		};
@@ -1157,18 +1158,19 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		for (int i = 0; i < Config::EMOTION_BUTTON_ITEM_COUNT; ++i) {
 			char temp[32];
 			snprintf(temp, sizeof(temp), "Emotion %d", i + 1);
-			Choice *item = emotionList->Add(new Choice(mc->T(temp), "", new LinearLayoutParams(240.0f, WRAP_CONTENT)));
+			Choice *item = emotionList_->Add(new Choice(mc->T(temp), "", new LinearLayoutParams(240.0f, WRAP_CONTENT)));
 			item->SetCentered(true);
-			item->OnClick.Add([emotionList, triggerEmotion, i](UI::EventParams &) {
+			item->OnClick.Add([this, triggerEmotion, i](UI::EventParams &) {
 				triggerEmotion(g_Config.EmotionButton[i]);
-				emotionList->SetVisibility(V_GONE);
+				emotionList_->SetVisibility(V_GONE);
+				emotionButtonDown_ = false;
 			});
 		}
 
 		if (emotionButton) {
-			emotionButton->OnChange.Add([emotionList](UI::EventParams &e) {
+			emotionButton->OnChange.Add([this](UI::EventParams &e) {
 				if (e.a) {
-					emotionList->SetVisibility(V_VISIBLE);
+					emotionList_->SetVisibility(emotionList_->GetVisibility() == V_VISIBLE ? V_GONE : V_VISIBLE);
 				}
 			});
 		}
@@ -1219,8 +1221,36 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 	}
 }
 
+bool GamepadEmuView::Touch(const TouchInput &input) {
+	if (emotionList_ && emotionList_->GetVisibility() == V_VISIBLE) {
+		if (input.flags & TouchInputFlags::DOWN) {
+			if (!emotionList_->GetBounds().Contains(input.x, input.y)) {
+				emotionList_->SetVisibility(V_GONE);
+				emotionButtonDown_ = false;
+				return true;
+			}
+		}
+
+		emotionList_->Touch(input);
+		return true;
+	}
+
+	return AnchorLayout::Touch(input);
+}
+
 void GamepadEmuView::Update() {
 	AnchorLayout::Update();
+
+	if (emotionPendingReleaseMask_ != 0) {
+		using namespace CustomKeyData;
+		for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
+			if (emotionPendingReleaseMask_ & (1ULL << i)) {
+				controlMapper_->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::UP);
+			}
+		}
+		emotionPendingReleaseMask_ = 0;
+	}
+
 	GamepadUpdateOpacity();
 
 	bool anyDown = false;
