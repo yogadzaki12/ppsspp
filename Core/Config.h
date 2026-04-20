@@ -504,6 +504,8 @@ public:
 	ConfigCustomButton CustomButton[TouchControlConfig::CUSTOM_BUTTON_COUNT];
 	enum { EMOTION_BUTTON_ITEM_COUNT = 8 };
 	uint64_t EmotionButton[EMOTION_BUTTON_ITEM_COUNT]{};
+	int EmotionButtonImage = 0;
+	int EmotionButtonShape = 0;
 
 	// Ignored on iOS and other platforms that lack pause.
 	bool bShowTouchPause;

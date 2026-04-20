@@ -491,6 +491,15 @@ void ControlLayoutView::CreateViews() {
 	ImageID shoulderImage = g_Config.iTouchButtonStyle ? ImageID("I_SHOULDER_LINE") : ImageID("I_SHOULDER");
 	ImageID stickImage = g_Config.iTouchButtonStyle ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
 	ImageID stickBg = g_Config.iTouchButtonStyle ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
+	using namespace CustomKeyData;
+	if (g_Config.EmotionButtonShape >= ARRAY_SIZE(customKeyShapes)) {
+		g_Config.EmotionButtonShape = 0;
+	}
+	if (g_Config.EmotionButtonImage >= ARRAY_SIZE(customKeyImages)) {
+		g_Config.EmotionButtonImage = 0;
+	}
+	auto emotionShape = customKeyShapes[g_Config.EmotionButtonShape];
+	auto emotionImage = customKeyImages[g_Config.EmotionButtonImage];
 
 	auto addDragDropButton = [&](ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img) {
 		DragDropButton *b = nullptr;
@@ -511,7 +520,13 @@ void ControlLayoutView::CreateViews() {
 	addDragDropButton(touch.touchStartKey, "Start button", rectImage, ImageID("I_START"));
 
 	addDragDropButton(touch.touchFastForwardKey, "Fast-forward button", rectImage, ImageID("I_FAST_FORWARD_LINE"));
-	addDragDropButton(touch.touchEmotionKey, "Emotion button", rectImage, ImageID("I_THREE_DOTS"));
+	if (touch.touchEmotionKey.show) {
+		if (auto *emotion = addDragDropButton(touch.touchEmotionKey, "Emotion button",
+			emotionShape.i, emotionImage.i)) {
+			emotion->SetAngle(emotionImage.r, emotionShape.r);
+			emotion->FlipImageH(emotionShape.f);
+		}
+	}
 	addDragDropButton(touch.touchLKey, "Left shoulder button", shoulderImage, ImageID("I_L"));
 	if (auto *rbutton = addDragDropButton(touch.touchRKey, "Right shoulder button", shoulderImage, ImageID("I_R"))) {
 		rbutton->FlipImageH(true);

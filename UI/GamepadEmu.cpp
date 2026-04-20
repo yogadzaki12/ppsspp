@@ -1134,7 +1134,19 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 
 	if (config.touchEmotionKey.show) {
 		auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
-		BoolButton *emotionButton = addBoolButton(&emotionButtonDown_, "Emotion button", rectImage, ImageID("I_RECT"), ImageID("I_THREE_DOTS"), config.touchEmotionKey);
+		using namespace CustomKeyData;
+		if (g_Config.EmotionButtonShape >= ARRAY_SIZE(customKeyShapes)) {
+			g_Config.EmotionButtonShape = 0;
+		}
+		if (g_Config.EmotionButtonImage >= ARRAY_SIZE(customKeyImages)) {
+			g_Config.EmotionButtonImage = 0;
+		}
+		const auto &emotionShape = customKeyShapes[g_Config.EmotionButtonShape];
+		const auto &emotionImage = customKeyImages[g_Config.EmotionButtonImage];
+		BoolButton *emotionButton = addBoolButton(&emotionButtonDown_, "Emotion button",
+			emotionShape.i, emotionShape.l, emotionImage.i, config.touchEmotionKey);
+		emotionButton->SetAngle(emotionImage.r, emotionShape.r);
+		emotionButton->FlipImageH(emotionShape.f);
 		emotionList_ = Add(new LinearLayout(ORIENT_VERTICAL, new AnchorLayoutParams(
 			config.touchEmotionKey.x * xres,
 			config.touchEmotionKey.y * yres - 170.0f * config.touchEmotionKey.scale,
@@ -1158,19 +1170,22 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		for (int i = 0; i < Config::EMOTION_BUTTON_ITEM_COUNT; ++i) {
 			char temp[32];
 			snprintf(temp, sizeof(temp), "Emotion %d", i + 1);
-			Choice *item = emotionList_->Add(new Choice(mc->T(temp), "", new LinearLayoutParams(240.0f, WRAP_CONTENT)));
+			Choice *item = emotionList_->Add(new StickyChoice(mc->T(temp), "", new LinearLayoutParams(240.0f, WRAP_CONTENT)));
 			item->SetCentered(true);
 			item->OnClick.Add([this, triggerEmotion, i](UI::EventParams &) {
 				triggerEmotion(g_Config.EmotionButton[i]);
-				emotionList_->SetVisibility(UI::V_GONE);
-				emotionButtonDown_ = false;
+				HideEmotionList();
 			});
 		}
 
 		if (emotionButton) {
 			emotionButton->OnChange.Add([this](UI::EventParams &e) {
 				if (e.a) {
-					emotionList_->SetVisibility(emotionList_->GetVisibility() == UI::V_VISIBLE ? UI::V_GONE : UI::V_VISIBLE);
+					if (emotionList_->GetVisibility() == UI::V_VISIBLE) {
+						HideEmotionList();
+					} else {
+						ShowEmotionList();
+					}
 				}
 			});
 		}
@@ -1221,12 +1236,36 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 	}
 }
 
+void GamepadEmuView::ReleaseAllTouches() {
+	TouchInput releaseAll{};
+	releaseAll.id = 0;
+	releaseAll.flags = TouchInputFlags::RELEASE_ALL;
+	UI::AnchorLayout::Touch(releaseAll);
+}
+
+void GamepadEmuView::ShowEmotionList() {
+	if (!emotionList_) {
+		return;
+	}
+	emotionList_->SetVisibility(UI::V_VISIBLE);
+	ReleaseAllTouches();
+	emotionButtonDown_ = false;
+}
+
+void GamepadEmuView::HideEmotionList() {
+	if (!emotionList_) {
+		return;
+	}
+	emotionList_->SetVisibility(UI::V_GONE);
+	ReleaseAllTouches();
+	emotionButtonDown_ = false;
+}
+
 bool GamepadEmuView::Touch(const TouchInput &input) {
 	if (emotionList_ && emotionList_->GetVisibility() == UI::V_VISIBLE) {
 		if (input.flags & TouchInputFlags::DOWN) {
 			if (!emotionList_->GetBounds().Contains(input.x, input.y)) {
-				emotionList_->SetVisibility(UI::V_GONE);
-				emotionButtonDown_ = false;
+				HideEmotionList();
 				return true;
 			}
 		}

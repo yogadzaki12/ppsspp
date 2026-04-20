@@ -36,6 +36,10 @@ public:
 	void Update() override;
 
 private:
+	void ShowEmotionList();
+	void HideEmotionList();
+	void ReleaseAllTouches();
+
 	bool emotionButtonDown_ = false;
 	UI::LinearLayout *emotionList_ = nullptr;
 	ControlMapper *controlMapper_ = nullptr;

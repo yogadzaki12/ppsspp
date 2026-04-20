@@ -1003,6 +1003,8 @@ static const ConfigSetting controlSettings[] = {
 	ConfigSetting("Emotion5Mapping", SETTING_IDX(g_Config, EmotionButton, 5), 0ULL, CfgFlag::PER_GAME),
 	ConfigSetting("Emotion6Mapping", SETTING_IDX(g_Config, EmotionButton, 6), 0ULL, CfgFlag::PER_GAME),
 	ConfigSetting("Emotion7Mapping", SETTING_IDX(g_Config, EmotionButton, 7), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("EmotionButtonImage", SETTING(g_Config, EmotionButtonImage), 0, CfgFlag::PER_GAME),
+	ConfigSetting("EmotionButtonShape", SETTING(g_Config, EmotionButtonShape), 0, CfgFlag::PER_GAME),
 
 	ConfigSetting("TiltBaseAngleY", SETTING(g_Config, fTiltBaseAngleY), 0.9f, CfgFlag::PER_GAME),
 	ConfigSetting("TiltInvertX", SETTING(g_Config, bInvertTiltX), false, CfgFlag::PER_GAME),

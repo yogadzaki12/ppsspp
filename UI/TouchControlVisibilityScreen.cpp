@@ -48,6 +48,64 @@ private:
 	UI::CheckBox *checkbox_;
 };
 
+class ButtonShapeScreen : public UI::PopupScreen {
+public:
+	ButtonShapeScreen(std::string_view title, int *setting) : PopupScreen(title), setting_(setting) {}
+
+	void CreatePopupContents(UI::ViewGroup *parent) override {
+		using namespace UI;
+		using namespace CustomKeyData;
+
+		ScrollView *scroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, 1.0f));
+		LinearLayout *items = new LinearLayoutList(ORIENT_VERTICAL);
+
+		for (int i = 0; i < ARRAY_SIZE(customKeyShapes); ++i) {
+			Choice *c = items->Add(new Choice(ImageID(customKeyShapes[i].l), 0.6f, customKeyShapes[i].r * PI / 180, customKeyShapes[i].f));
+			c->OnClick.Add([=](UI::EventParams &) {
+				*setting_ = i;
+				TriggerFinish(DR_OK);
+			});
+		}
+
+		scroll->Add(items);
+		parent->Add(scroll);
+	}
+
+	const char *tag() const override { return "EmotionButtonShape"; }
+
+private:
+	int *setting_;
+};
+
+class ButtonIconScreen : public UI::PopupScreen {
+public:
+	ButtonIconScreen(std::string_view title, int *setting) : PopupScreen(title), setting_(setting) {}
+
+	void CreatePopupContents(UI::ViewGroup *parent) override {
+		using namespace UI;
+		using namespace CustomKeyData;
+
+		ScrollView *scroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, 1.0f));
+		LinearLayout *items = new LinearLayoutList(ORIENT_VERTICAL);
+
+		for (int i = 0; i < ARRAY_SIZE(customKeyImages); ++i) {
+			Choice *c = items->Add(new Choice(ImageID(customKeyImages[i].i), 1.0f, customKeyImages[i].r * PI / 180));
+			c->OnClick.Add([=](UI::EventParams &) {
+				*setting_ = i;
+				TriggerFinish(DR_OK);
+			});
+		}
+
+		scroll->Add(items);
+		parent->Add(scroll);
+	}
+
+	const char *tag() const override { return "EmotionButtonIcon"; }
+
+private:
+	int *setting_;
+};
+
 class EmotionBindingMappingScreen : public UISimpleBaseDialogScreen {
 public:
 	EmotionBindingMappingScreen(const Path &gamePath, int id) : UISimpleBaseDialogScreen(gamePath, SimpleDialogFlags::ContentsCanScroll), id_(id) {}
@@ -61,6 +119,13 @@ public:
 			return;
 		}
 
+		if (g_Config.EmotionButtonShape >= ARRAY_SIZE(customKeyShapes)) {
+			g_Config.EmotionButtonShape = 0;
+		}
+		if (g_Config.EmotionButtonImage >= ARRAY_SIZE(customKeyImages)) {
+			g_Config.EmotionButtonImage = 0;
+		}
+
 		for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
 			array_[i] = (g_Config.EmotionButton[id_] & (1ULL << i)) != 0;
 		}
@@ -70,6 +135,32 @@ public:
 		GridLayoutSettings gridsettings(cellSize, 64, 5);
 		gridsettings.fillCells = true;
 		GridLayout *grid = parent->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
+
+		LinearLayout *vertLayout = new LinearLayout(ORIENT_VERTICAL);
+		parent->Add(vertLayout);
+		vertLayout->Add(new ItemHeader(mc->T("Button style")));
+
+		Choice *icon = vertLayout->Add(new Choice(mc->T("Icon")));
+		icon->SetIconRight(ImageID(customKeyImages[g_Config.EmotionButtonImage].i), 1.0f, customKeyImages[g_Config.EmotionButtonImage].r * PI / 180, false, false);
+		icon->OnClick.Add([this](UI::EventParams &e) {
+			auto popup = new ButtonIconScreen(GetTitle(), &g_Config.EmotionButtonImage);
+			if (e.v) {
+				popup->SetPopupOrigin(e.v);
+			}
+			screenManager()->push(popup);
+		});
+
+		Choice *shape = vertLayout->Add(new Choice(mc->T("Shape")));
+		shape->SetIconRight(ImageID(customKeyShapes[g_Config.EmotionButtonShape].l), 0.6f, customKeyShapes[g_Config.EmotionButtonShape].r * PI / 180, customKeyShapes[g_Config.EmotionButtonShape].f, false);
+		shape->OnClick.Add([this](UI::EventParams &e) {
+			auto popup = new ButtonShapeScreen(GetTitle(), &g_Config.EmotionButtonShape);
+			if (e.v) {
+				popup->SetPopupOrigin(e.v);
+			}
+			screenManager()->push(popup);
+		});
+
+		vertLayout->Add(new ItemHeader(mc->T("Button Binding")));
 
 		for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
 			LinearLayout *row = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
