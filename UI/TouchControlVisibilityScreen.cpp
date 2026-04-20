@@ -23,9 +23,11 @@
 #include "Common/UI/PopupScreens.h"
 
 #include "Core/Config.h"
+#include "Core/KeyMap.h"
 
 #include "UI/TouchControlVisibilityScreen.h"
 #include "UI/CustomButtonMappingScreen.h"
+#include "UI/GamepadEmu.h"
 
 static const int leftColumnWidth = 140;
 
@@ -44,6 +46,84 @@ private:
 	void HandleClick(UI::EventParams &e);
 
 	UI::CheckBox *checkbox_;
+};
+
+class EmotionBindingMappingScreen : public UISimpleBaseDialogScreen {
+public:
+	EmotionBindingMappingScreen(const Path &gamePath, int id) : UISimpleBaseDialogScreen(gamePath, SimpleDialogFlags::ContentsCanScroll), id_(id) {}
+
+	void CreateDialogViews(UI::ViewGroup *parent) override {
+		using namespace UI;
+		using namespace CustomKeyData;
+		auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
+
+		if (id_ < 0 || id_ >= Config::EMOTION_BUTTON_ITEM_COUNT) {
+			return;
+		}
+
+		for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
+			array_[i] = (g_Config.EmotionButton[id_] & (1ULL << i)) != 0;
+		}
+
+		const bool portrait = GetDeviceOrientation() == DeviceOrientation::Portrait;
+		const int cellSize = portrait ? std::min((g_display.dp_xres / 2 - 10), 290) : 380;
+		GridLayoutSettings gridsettings(cellSize, 64, 5);
+		gridsettings.fillCells = true;
+		GridLayout *grid = parent->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
+
+		for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
+			LinearLayout *row = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
+			row->SetSpacing(0);
+
+			CheckBox *checkbox = new CheckBox(&array_[i], "", "", new LinearLayoutParams(50, WRAP_CONTENT));
+			row->Add(checkbox);
+
+			Choice *choice;
+			if (g_customKeyList[i].i.isValid()) {
+				choice = new Choice(g_customKeyList[i].i, new LinearLayoutParams(1.0f));
+			} else {
+				choice = new Choice(mc->T(KeyMap::GetPspButtonNameCharPointer(g_customKeyList[i].c)), new LinearLayoutParams(1.0f));
+			}
+
+			choice->SetCentered(true);
+			choice->OnClick.Add([checkbox](EventParams &) {
+				checkbox->Toggle();
+			});
+
+			row->Add(choice);
+			grid->Add(row);
+		}
+	}
+
+	void onFinish(DialogResult result) override {
+		if (id_ < 0 || id_ >= Config::EMOTION_BUTTON_ITEM_COUNT) {
+			return;
+		}
+
+		uint64_t value = 0;
+		for (int i = ARRAY_SIZE(array_) - 1; i >= 0; --i) {
+			value |= array_[i] ? 1ULL : 0ULL;
+			if (i > 0) {
+				value <<= 1;
+			}
+		}
+		g_Config.EmotionButton[id_] = value;
+	}
+
+	std::string_view GetTitle() const override {
+		auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
+		char temp[32];
+		snprintf(temp, sizeof(temp), "Emotion %d", id_ + 1);
+		title_ = std::string(mc->T(temp)) + " binding";
+		return title_;
+	}
+
+	const char *tag() const override { return "EmotionBindingMapping"; }
+
+private:
+	bool array_[ARRAY_SIZE(CustomKeyData::g_customKeyList)]{};
+	int id_ = 0;
+	mutable std::string title_;
 };
 
 std::string_view TouchControlVisibilityScreen::GetTitle() const {
@@ -72,6 +152,7 @@ void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
 
 	auto di = GetI18NCategory(I18NCat::DIALOG);
 	auto co = GetI18NCategory(I18NCat::CONTROLS);
+	auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
 
 	const bool portrait = GetDeviceOrientation() == DeviceOrientation::Portrait;
 
@@ -97,6 +178,24 @@ void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
 		screenManager()->push(new RightAnalogMappingScreen(gamePath_));
 	}});
 	toggles_.push_back({ "Fast-forward", &touch.touchFastForwardKey.show, ImageID::invalid(), nullptr});
+	toggles_.push_back({ "Emotion", &touch.touchEmotionKey.show, ImageID("I_THREE_DOTS"), [=](EventParams &e) {
+		std::vector<std::string> items;
+		for (int i = 0; i < Config::EMOTION_BUTTON_ITEM_COUNT; ++i) {
+			char temp[32];
+			snprintf(temp, sizeof(temp), "Emotion %d", i + 1);
+			items.push_back(mc->T(temp));
+		}
+
+		auto *popup = new ListPopupScreen(mc->T("Emotion"), items, -1, [=](int index) {
+			if (index >= 0 && index < Config::EMOTION_BUTTON_ITEM_COUNT) {
+				screenManager()->push(new EmotionBindingMappingScreen(gamePath_, index));
+			}
+		});
+		if (e.v) {
+			popup->SetPopupOrigin(e.v);
+		}
+		screenManager()->push(popup);
+	}});
 	toggles_.push_back({ "Pause", &touch.touchPauseKey.show, ImageID("I_HAMBURGER"), nullptr});
 
 	for (int i = 0; i < TouchControlConfig::CUSTOM_BUTTON_COUNT; i++) {
@@ -107,7 +206,6 @@ void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
 		} });
 	}
 
-	auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
 	for (auto toggle : toggles_) {
 		LinearLayout *row = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
 		row->SetSpacing(0);

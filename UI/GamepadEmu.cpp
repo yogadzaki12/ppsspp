@@ -976,6 +976,10 @@ void InitPadLayout(TouchControlConfig *config, DeviceOrientation orientation, fl
 		int fast_forward_key_X = halfW;
 		int fast_forward_key_Y = screenBottom - bottom_button_Y * scale - 100;
 		initTouchPos(&config->touchFastForwardKey, fast_forward_key_X, fast_forward_key_Y);
+
+		int emotion_key_X = halfW;
+		int emotion_key_Y = screenBottom - bottom_button_Y * scale - 150;
+		initTouchPos(&config->touchEmotionKey, emotion_key_X, emotion_key_Y);
 	} else {
 		int start_key_X = halfW + bottom_key_spacing * scale;
 		int start_key_Y = screenBottom - bottom_button_Y * scale;
@@ -988,6 +992,10 @@ void InitPadLayout(TouchControlConfig *config, DeviceOrientation orientation, fl
 		int fast_forward_key_X = halfW - bottom_key_spacing * scale;
 		int fast_forward_key_Y = screenBottom - bottom_button_Y * scale;
 		initTouchPos(&config->touchFastForwardKey, fast_forward_key_X, fast_forward_key_Y);
+
+		int emotion_key_X = halfW - 2 * bottom_key_spacing * scale;
+		int emotion_key_Y = screenBottom - bottom_button_Y * scale;
+		initTouchPos(&config->touchEmotionKey, emotion_key_X, emotion_key_Y);
 	}
 
 	// L and R------------------------------------------------------------
@@ -1120,6 +1128,50 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 				Core_Resume();
 			}
 		});
+	}
+
+	LinearLayout *emotionList = nullptr;
+	if (config.touchEmotionKey.show) {
+		auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
+		BoolButton *emotionButton = addBoolButton(&emotionButtonDown_, "Emotion button", rectImage, ImageID("I_RECT"), ImageID("I_THREE_DOTS"), config.touchEmotionKey);
+		emotionList = Add(new LinearLayout(ORIENT_VERTICAL, new AnchorLayoutParams(
+			config.touchEmotionKey.x * xres,
+			config.touchEmotionKey.y * yres - 170.0f * config.touchEmotionKey.scale,
+			NONE,
+			NONE,
+			Centering::Both)));
+		emotionList->SetBG(Drawable(0xC0202020));
+		emotionList->SetVisibility(V_GONE);
+		emotionList->SetSpacing(2.0f);
+
+		auto triggerEmotion = [controlMapper](uint64_t mask) {
+			using namespace CustomKeyData;
+			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
+				if (mask & (1ULL << i)) {
+					controlMapper->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::DOWN);
+					controlMapper->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::UP);
+				}
+			}
+		};
+
+		for (int i = 0; i < Config::EMOTION_BUTTON_ITEM_COUNT; ++i) {
+			char temp[32];
+			snprintf(temp, sizeof(temp), "Emotion %d", i + 1);
+			Choice *item = emotionList->Add(new Choice(mc->T(temp), "", new LinearLayoutParams(240.0f, WRAP_CONTENT)));
+			item->SetCentered(true);
+			item->OnClick.Add([emotionList, triggerEmotion, i](UI::EventParams &) {
+				triggerEmotion(g_Config.EmotionButton[i]);
+				emotionList->SetVisibility(V_GONE);
+			});
+		}
+
+		if (emotionButton) {
+			emotionButton->OnChange.Add([emotionList](UI::EventParams &e) {
+				if (e.a) {
+					emotionList->SetVisibility(V_VISIBLE);
+				}
+			});
+		}
 	}
 
 	addPSPButton(CTRL_LTRIGGER, "Left shoulder button", shoulderImage, ImageID("I_SHOULDER"), ImageID("I_L"), config.touchLKey);

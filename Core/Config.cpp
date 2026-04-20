@@ -883,6 +883,7 @@ void TouchControlConfig::ResetLayout() {
 	reset(&touchStartKey);
 	reset(&touchSelectKey);
 	reset(&touchFastForwardKey);
+	reset(&touchEmotionKey);
 	reset(&touchLKey);
 	reset(&touchRKey);
 	reset(&touchAnalogStick);
@@ -952,6 +953,7 @@ static const ConfigSetting touchControlSettings[] = {
 	ConfigSetting("StartKeyX", "StartKeyY", "StartKeyScale", "ShowTouchStart", SETTING(g_Config.touchControlsLandscape, touchStartKey), defaultTouchPosShow, CfgFlag::PER_GAME),
 	ConfigSetting("SelectKeyX", "SelectKeyY", "SelectKeyScale", "ShowTouchSelect", SETTING(g_Config.touchControlsLandscape, touchSelectKey), defaultTouchPosShow, CfgFlag::PER_GAME),
 	ConfigSetting("UnthrottleKeyX", "UnthrottleKeyY", "UnthrottleKeyScale", "ShowTouchUnthrottle", SETTING(g_Config.touchControlsLandscape, touchFastForwardKey), defaultTouchPosShow, CfgFlag::PER_GAME),
+	ConfigSetting("EmotionKeyX", "EmotionKeyY", "EmotionKeyScale", "ShowTouchEmotion", SETTING(g_Config.touchControlsLandscape, touchEmotionKey), defaultTouchPosHide, CfgFlag::PER_GAME),
 	ConfigSetting("LKeyX", "LKeyY", "LKeyScale", "ShowTouchLTrigger", SETTING(g_Config.touchControlsLandscape, touchLKey), defaultTouchPosShow, CfgFlag::PER_GAME),
 	ConfigSetting("RKeyX", "RKeyY", "RKeyScale", "ShowTouchRTrigger", SETTING(g_Config.touchControlsLandscape, touchRKey), defaultTouchPosShow, CfgFlag::PER_GAME),
 	ConfigSetting("PauseKeyX", "PauseKeyY", "PauseKeyScale", "ShowTouchPause", SETTING(g_Config.touchControlsLandscape, touchPauseKey), defaultTouchPosShow, CfgFlag::PER_GAME),
@@ -993,6 +995,14 @@ static const ConfigSetting controlSettings[] = {
 	ConfigSetting("Custom17Mapping", "Custom17Image", "Custom17Shape", "Custom17Toggle", "Custom17Repeat", "Custom17SwipeUpMask", "Custom17SwipeDownMask", "Custom17SwipeLeftMask", "Custom17SwipeRightMask", SETTING_IDX(g_Config, CustomButton, 17), {0, 2, 9, false, false}, CfgFlag::PER_GAME),
 	ConfigSetting("Custom18Mapping", "Custom18Image", "Custom18Shape", "Custom18Toggle", "Custom18Repeat", "Custom18SwipeUpMask", "Custom18SwipeDownMask", "Custom18SwipeLeftMask", "Custom18SwipeRightMask", SETTING_IDX(g_Config, CustomButton, 18), {0, 3, 9, false, false}, CfgFlag::PER_GAME),
 	ConfigSetting("Custom19Mapping", "Custom19Image", "Custom19Shape", "Custom19Toggle", "Custom19Repeat", "Custom19SwipeUpMask", "Custom19SwipeDownMask", "Custom19SwipeLeftMask", "Custom19SwipeRightMask", SETTING_IDX(g_Config, CustomButton, 19), {0, 4, 9, false, false}, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion0Mapping", SETTING_IDX(g_Config, EmotionButton, 0), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion1Mapping", SETTING_IDX(g_Config, EmotionButton, 1), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion2Mapping", SETTING_IDX(g_Config, EmotionButton, 2), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion3Mapping", SETTING_IDX(g_Config, EmotionButton, 3), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion4Mapping", SETTING_IDX(g_Config, EmotionButton, 4), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion5Mapping", SETTING_IDX(g_Config, EmotionButton, 5), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion6Mapping", SETTING_IDX(g_Config, EmotionButton, 6), 0ULL, CfgFlag::PER_GAME),
+	ConfigSetting("Emotion7Mapping", SETTING_IDX(g_Config, EmotionButton, 7), 0ULL, CfgFlag::PER_GAME),
 
 	ConfigSetting("TiltBaseAngleY", SETTING(g_Config, fTiltBaseAngleY), 0.9f, CfgFlag::PER_GAME),
 	ConfigSetting("TiltInvertX", SETTING(g_Config, bInvertTiltX), false, CfgFlag::PER_GAME),

@@ -511,6 +511,7 @@ void ControlLayoutView::CreateViews() {
 	addDragDropButton(touch.touchStartKey, "Start button", rectImage, ImageID("I_START"));
 
 	addDragDropButton(touch.touchFastForwardKey, "Fast-forward button", rectImage, ImageID("I_FAST_FORWARD_LINE"));
+	addDragDropButton(touch.touchEmotionKey, "Emotion button", rectImage, ImageID("I_THREE_DOTS"));
 	addDragDropButton(touch.touchLKey, "Left shoulder button", shoulderImage, ImageID("I_L"));
 	if (auto *rbutton = addDragDropButton(touch.touchRKey, "Right shoulder button", shoulderImage, ImageID("I_R"))) {
 		rbutton->FlipImageH(true);

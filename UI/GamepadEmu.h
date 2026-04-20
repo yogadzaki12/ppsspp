@@ -33,6 +33,9 @@ class GamepadEmuView : public UI::AnchorLayout {
 public:
 	GamepadEmuView(const TouchControlConfig &config, float xres, float yres, bool *pause, ControlMapper *controlMapper, UI::LayoutParams *layoutParams);
 	void Update() override;
+
+private:
+	bool emotionButtonDown_ = false;
 };
 
 class GamepadComponent : public UI::View {

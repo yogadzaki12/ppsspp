@@ -103,6 +103,7 @@ struct TouchControlConfig : public ConfigBlock {
 	constexpr TouchControlConfig() {
 		// Hide all extras and custom buttons by default.
 		touchRightAnalogStick.show = false;
+		touchEmotionKey.show = false;
 		for (size_t i = 0; i < CUSTOM_BUTTON_COUNT; i++) {
 			touchCustom[i].show = false;
 		}
@@ -119,6 +120,7 @@ struct TouchControlConfig : public ConfigBlock {
 	ConfigTouchPos touchStartKey;
 	ConfigTouchPos touchSelectKey;
 	ConfigTouchPos touchFastForwardKey;
+	ConfigTouchPos touchEmotionKey;
 	ConfigTouchPos touchLKey;
 	ConfigTouchPos touchRKey;
 	ConfigTouchPos touchAnalogStick;
@@ -500,6 +502,8 @@ public:
 
 	// These are shared between portrait and landscape, just the positions aren't.
 	ConfigCustomButton CustomButton[TouchControlConfig::CUSTOM_BUTTON_COUNT];
+	enum { EMOTION_BUTTON_ITEM_COUNT = 8 };
+	uint64_t EmotionButton[EMOTION_BUTTON_ITEM_COUNT]{};
 
 	// Ignored on iOS and other platforms that lack pause.
 	bool bShowTouchPause;
