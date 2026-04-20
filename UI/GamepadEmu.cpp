@@ -1170,7 +1170,11 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		for (int i = 0; i < Config::EMOTION_BUTTON_ITEM_COUNT; ++i) {
 			char temp[32];
 			snprintf(temp, sizeof(temp), "Emotion %d", i + 1);
-			Choice *item = emotionList_->Add(new StickyChoice(mc->T(temp), "", new LinearLayoutParams(240.0f, WRAP_CONTENT)));
+			std::string label = g_Config.EmotionListName[i];
+			if (label.empty()) {
+				label = std::string(mc->T(temp));
+			}
+			Choice *item = emotionList_->Add(new StickyChoice(label, "", new LinearLayoutParams(240.0f, WRAP_CONTENT)));
 			item->SetCentered(true);
 			item->OnClick.Add([this, triggerEmotion, i](UI::EventParams &) {
 				triggerEmotion(g_Config.EmotionButton[i]);

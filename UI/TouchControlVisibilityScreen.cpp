@@ -16,6 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "Common/System/Display.h"
+#include "Common/System/System.h"
 #include "Common/Render/TextureAtlas.h"
 #include "Common/Data/Text/I18n.h"
 #include "Common/StringUtils.h"
@@ -108,16 +109,13 @@ private:
 
 class EmotionBindingMappingScreen : public UISimpleBaseDialogScreen {
 public:
-	EmotionBindingMappingScreen(const Path &gamePath, int id) : UISimpleBaseDialogScreen(gamePath, SimpleDialogFlags::ContentsCanScroll), id_(id) {}
+	EmotionBindingMappingScreen(const Path &gamePath) : UISimpleBaseDialogScreen(gamePath, SimpleDialogFlags::ContentsCanScroll) {}
 
 	void CreateDialogViews(UI::ViewGroup *parent) override {
 		using namespace UI;
 		using namespace CustomKeyData;
+		auto co = GetI18NCategory(I18NCat::CONTROLS);
 		auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
-
-		if (id_ < 0 || id_ >= Config::EMOTION_BUTTON_ITEM_COUNT) {
-			return;
-		}
 
 		if (g_Config.EmotionButtonShape >= ARRAY_SIZE(customKeyShapes)) {
 			g_Config.EmotionButtonShape = 0;
@@ -126,95 +124,116 @@ public:
 			g_Config.EmotionButtonImage = 0;
 		}
 
-		for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
-			array_[i] = (g_Config.EmotionButton[id_] & (1ULL << i)) != 0;
+		for (int e = 0; e < Config::EMOTION_BUTTON_ITEM_COUNT; ++e) {
+			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
+				array_[e][i] = (g_Config.EmotionButton[e] & (1ULL << i)) != 0;
+			}
 		}
 
-		const bool portrait = GetDeviceOrientation() == DeviceOrientation::Portrait;
-		const int cellSize = portrait ? std::min((g_display.dp_xres / 2 - 10), 290) : 380;
-		GridLayoutSettings gridsettings(cellSize, 64, 5);
-		gridsettings.fillCells = true;
-		GridLayout *grid = parent->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
+		LinearLayout *vertLayout = parent->Add(new LinearLayout(ORIENT_VERTICAL));
+		vertLayout->Add(new ItemHeader(co->T("Button style")));
 
-		LinearLayout *vertLayout = new LinearLayout(ORIENT_VERTICAL);
-		parent->Add(vertLayout);
-		vertLayout->Add(new ItemHeader(mc->T("Button style")));
-
-		Choice *icon = vertLayout->Add(new Choice(mc->T("Icon")));
+		Choice *icon = vertLayout->Add(new Choice(co->T("Icon")));
 		icon->SetIconRight(ImageID(customKeyImages[g_Config.EmotionButtonImage].i), 1.0f, customKeyImages[g_Config.EmotionButtonImage].r * PI / 180, false, false);
 		icon->OnClick.Add([this](UI::EventParams &e) {
-			auto popup = new ButtonIconScreen(GetTitle(), &g_Config.EmotionButtonImage);
+			auto popup = new ButtonIconScreen(T(I18NCat::CONTROLS, "Icon"), &g_Config.EmotionButtonImage);
 			if (e.v) {
 				popup->SetPopupOrigin(e.v);
 			}
 			screenManager()->push(popup);
 		});
 
-		Choice *shape = vertLayout->Add(new Choice(mc->T("Shape")));
+		Choice *shape = vertLayout->Add(new Choice(co->T("Shape")));
 		shape->SetIconRight(ImageID(customKeyShapes[g_Config.EmotionButtonShape].l), 0.6f, customKeyShapes[g_Config.EmotionButtonShape].r * PI / 180, customKeyShapes[g_Config.EmotionButtonShape].f, false);
 		shape->OnClick.Add([this](UI::EventParams &e) {
-			auto popup = new ButtonShapeScreen(GetTitle(), &g_Config.EmotionButtonShape);
+			auto popup = new ButtonShapeScreen(T(I18NCat::CONTROLS, "Shape"), &g_Config.EmotionButtonShape);
 			if (e.v) {
 				popup->SetPopupOrigin(e.v);
 			}
 			screenManager()->push(popup);
 		});
 
-		vertLayout->Add(new ItemHeader(mc->T("Button Binding")));
+		vertLayout->Add(new ItemHeader(co->T("Button Binding")));
 
-		for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
-			LinearLayout *row = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
-			row->SetSpacing(0);
+		UI::GridLayoutSettings gridsettings(400, 64, 5);
+		gridsettings.fillCells = true;
 
-			CheckBox *checkbox = new CheckBox(&array_[i], "", "", new LinearLayoutParams(50, WRAP_CONTENT));
-			row->Add(checkbox);
-
-			Choice *choice;
-			if (g_customKeyList[i].i.isValid()) {
-				choice = new Choice(g_customKeyList[i].i, new LinearLayoutParams(1.0f));
-			} else {
-				choice = new Choice(mc->T(KeyMap::GetPspButtonNameCharPointer(g_customKeyList[i].c)), new LinearLayoutParams(1.0f));
+		for (int e = 0; e < Config::EMOTION_BUTTON_ITEM_COUNT; ++e) {
+			char temp[32];
+			snprintf(temp, sizeof(temp), "Emotion %d", e + 1);
+			const std::string defaultLabel = std::string(mc->T(temp));
+			std::string &nameRef = g_Config.EmotionListName[e];
+			if (nameRef.empty()) {
+				nameRef = defaultLabel;
 			}
 
-			choice->SetCentered(true);
-			choice->OnClick.Add([checkbox](EventParams &) {
-				checkbox->Toggle();
+			vertLayout->Add(new ItemHeader(nameRef));
+
+			Choice *rename = vertLayout->Add(new Choice(ApplySafeSubstitutions("%1: %2", co->T("Name"), nameRef)));
+			rename->OnClick.Add([this, e, defaultLabel](UI::EventParams &ev) {
+				auto popup = new TextEditPopupScreen(&g_Config.EmotionListName[e], defaultLabel, T(I18NCat::CONTROLS, "Name"), 64);
+				if (System_GetPropertyBool(SYSPROP_KEYBOARD_IS_SOFT)) {
+					popup->SetAlignTop(true);
+				}
+				popup->OnChange.Add([this](UI::EventParams &) {
+					RecreateViews();
+				});
+				if (ev.v) {
+					popup->SetPopupOrigin(ev.v);
+				}
+				screenManager()->push(popup);
 			});
 
-			row->Add(choice);
-			grid->Add(row);
+			GridLayout *grid = vertLayout->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
+
+			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); ++i) {
+				LinearLayout *row = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
+				row->SetSpacing(0);
+
+				CheckBox *checkbox = new CheckBox(&array_[e][i], "", "", new LinearLayoutParams(50, WRAP_CONTENT));
+				row->Add(checkbox);
+
+				Choice *choice;
+				if (g_customKeyList[i].i.isValid()) {
+					choice = new Choice(g_customKeyList[i].i, new LinearLayoutParams(1.0f));
+				} else {
+					choice = new Choice(mc->T(KeyMap::GetPspButtonNameCharPointer(g_customKeyList[i].c)), new LinearLayoutParams(1.0f));
+				}
+
+				choice->SetCentered(true);
+				choice->OnClick.Add([checkbox](EventParams &) {
+					checkbox->Toggle();
+				});
+
+				row->Add(choice);
+				grid->Add(row);
+			}
 		}
 	}
 
 	void onFinish(DialogResult result) override {
-		if (id_ < 0 || id_ >= Config::EMOTION_BUTTON_ITEM_COUNT) {
-			return;
-		}
-
-		uint64_t value = 0;
-		for (int i = ARRAY_SIZE(array_) - 1; i >= 0; --i) {
-			value |= array_[i] ? 1ULL : 0ULL;
-			if (i > 0) {
-				value <<= 1;
+		for (int e = 0; e < Config::EMOTION_BUTTON_ITEM_COUNT; ++e) {
+			uint64_t value = 0;
+			for (int i = ARRAY_SIZE(CustomKeyData::g_customKeyList) - 1; i >= 0; --i) {
+				value |= array_[e][i] ? 1ULL : 0ULL;
+				if (i > 0) {
+					value <<= 1;
+				}
 			}
+			g_Config.EmotionButton[e] = value;
 		}
-		g_Config.EmotionButton[id_] = value;
+		g_Config.Save("EmotionBindingMappingScreen::onFinish");
 	}
 
 	std::string_view GetTitle() const override {
-		auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
-		char temp[32];
-		snprintf(temp, sizeof(temp), "Emotion %d", id_ + 1);
-		title_ = std::string(mc->T(temp)) + " binding";
-		return title_;
+		auto co = GetI18NCategory(I18NCat::CONTROLS);
+		return co->T("Emotion button setup");
 	}
 
 	const char *tag() const override { return "EmotionBindingMapping"; }
 
 private:
-	bool array_[ARRAY_SIZE(CustomKeyData::g_customKeyList)]{};
-	int id_ = 0;
-	mutable std::string title_;
+	bool array_[Config::EMOTION_BUTTON_ITEM_COUNT][ARRAY_SIZE(CustomKeyData::g_customKeyList)]{};
 };
 
 std::string_view TouchControlVisibilityScreen::GetTitle() const {
@@ -270,22 +289,7 @@ void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	}});
 	toggles_.push_back({ "Fast-forward", &touch.touchFastForwardKey.show, ImageID::invalid(), nullptr});
 	toggles_.push_back({ "Emotion", &touch.touchEmotionKey.show, ImageID("I_THREE_DOTS"), [=](EventParams &e) {
-		std::vector<std::string> items;
-		for (int i = 0; i < Config::EMOTION_BUTTON_ITEM_COUNT; ++i) {
-			char temp[32];
-			snprintf(temp, sizeof(temp), "Emotion %d", i + 1);
-				items.push_back(std::string(mc->T(temp)));
-		}
-
-		auto *popup = new ListPopupScreen(mc->T("Emotion"), items, -1, [=](int index) {
-			if (index >= 0 && index < Config::EMOTION_BUTTON_ITEM_COUNT) {
-				screenManager()->push(new EmotionBindingMappingScreen(gamePath_, index));
-			}
-		});
-		if (e.v) {
-			popup->SetPopupOrigin(e.v);
-		}
-		screenManager()->push(popup);
+		screenManager()->push(new EmotionBindingMappingScreen(gamePath_));
 	}});
 	toggles_.push_back({ "Pause", &touch.touchPauseKey.show, ImageID("I_HAMBURGER"), nullptr});
 
