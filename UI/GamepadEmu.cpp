@@ -1034,14 +1034,14 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		}
 		return nullptr;
 	};
-	auto addCustomButton = [this, buttonLayoutParams, controlMapper](const ConfigCustomButton& cfg, const char *key, const ConfigTouchPos &touch) -> CustomButton * {
+	auto addCustomButton = [this, buttonLayoutParams, controlMapper](const ConfigCustomButton& cfg, bool summaryShow, const std::string &summaryText, const char *key, const ConfigTouchPos &touch) -> CustomButton * {
 		using namespace CustomKeyData;
 		if (touch.show) {
 			_dbg_assert_(cfg.shape < ARRAY_SIZE(customKeyShapes));
 			_dbg_assert_(cfg.image < ARRAY_SIZE(customKeyImages));
 
 			// Note: cfg.shape and cfg.image are bounds-checked elsewhere.
-			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, cfg.summaryShow, cfg.summaryText, controlMapper,
+			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, summaryShow, summaryText, controlMapper,
 					g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyShapes[cfg.shape].i,
 					customKeyImages[cfg.image].i, touch.scale, customKeyShapes[cfg.shape].d, buttonLayoutParams(touch)));
 			aux->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
@@ -1112,7 +1112,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 
 		char temp[64];
 		snprintf(temp, sizeof(temp), "Custom %d button", i + 1);
-		addCustomButton(g_Config.CustomButton[i], temp, config.touchCustom[i]);
+		addCustomButton(g_Config.CustomButton[i], g_Config.bCustomButtonSummary[i], g_Config.sCustomButtonSummaryText[i], temp, config.touchCustom[i]);
 	}
 
 	// Add the two gesture zones.

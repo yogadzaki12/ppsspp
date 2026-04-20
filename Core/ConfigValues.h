@@ -72,8 +72,6 @@ struct ConfigCustomButton {
 	int shape;
 	bool toggle;
 	bool repeat;
-	bool summaryShow;
-	std::string summaryText;
 };
 
 enum class CPUCore {

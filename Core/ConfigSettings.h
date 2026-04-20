@@ -147,8 +147,8 @@ struct ConfigSetting {
 		default_.touchPos = def;
 	}
 
-	ConfigSetting(const char *iniKey, const char *iniImage, const char *iniShape, const char *iniToggle, const char *iniRepeat, const char *iniSummaryShow, const char *iniSummaryText, ConfigBlock *configBlock, ConfigCustomButton *v, ConfigCustomButton def, CfgFlag flags) noexcept
-		: iniKey_(iniKey), ini2_(iniImage), ini3_(iniShape), ini4_(iniToggle), ini5_(iniRepeat), ini6_(iniSummaryShow), ini7_(iniSummaryText), type_(Type::TYPE_CUSTOM_BUTTON), flags_(flags), offset_((const char *)v - (const char *)configBlock) {
+	ConfigSetting(const char *iniKey, const char *iniImage, const char *iniShape, const char *iniToggle, const char *iniRepeat, ConfigBlock *configBlock, ConfigCustomButton *v, ConfigCustomButton def, CfgFlag flags) noexcept
+		: iniKey_(iniKey), ini2_(iniImage), ini3_(iniShape), ini4_(iniToggle), ini5_(iniRepeat), type_(Type::TYPE_CUSTOM_BUTTON), flags_(flags), offset_((const char *)v - (const char *)configBlock) {
 		defaultCallback_.customButton = nullptr;
 		default_.customButton = def;
 	}
@@ -220,8 +220,6 @@ struct ConfigSetting {
 	const char *ini3_ = nullptr;
 	const char *ini4_ = nullptr;
 	const char *ini5_ = nullptr;
-	const char *ini6_ = nullptr;
-	const char *ini7_ = nullptr;
 
 	const Type type_;
 
