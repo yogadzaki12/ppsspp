@@ -308,7 +308,7 @@ bool CustomButton::Touch(const TouchInput &input) {
 		on_ = false;
 	}
 
-	if (!swipeTriggered_ && swipePointerId_ == input.id && (input.flags & TouchInputFlags::MOVE) && down) {
+	if (!swipeTriggered_ && swipePointerId_ == input.id && (input.flags & TouchInputFlags::MOVE)) {
 		float dx = (input.x - swipeDownX_) * g_display.dpi_scale_x;
 		float dy = (input.y - swipeDownY_) * g_display.dpi_scale_y;
 		rotateTouchHelper(dx, dy);
