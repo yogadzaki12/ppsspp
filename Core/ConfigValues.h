@@ -72,10 +72,10 @@ struct ConfigCustomButton {
 	int shape = 0;
 	bool toggle = false;
 	bool repeat = false;
-	int swipeUp = 0;
-	int swipeDown = 0;
-	int swipeLeft = 0;
-	int swipeRight = 0;
+	uint64_t swipeUp = 0;
+	uint64_t swipeDown = 0;
+	uint64_t swipeLeft = 0;
+	uint64_t swipeRight = 0;
 };
 
 enum class CPUCore {

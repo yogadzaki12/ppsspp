@@ -186,7 +186,7 @@ const int baseActionButtonSpacing = 60;
 // Customizable buttons, press a combination of buttons specified by pspButtonBit.
 class CustomButton : public MultiTouchButton {
 public:
-	CustomButton(uint64_t pspButtonBit, std::string_view key, bool toggle, bool repeat, int swipeUp, int swipeDown, int swipeLeft, int swipeRight, ControlMapper* controllMapper, ImageID bgImg, ImageID bgDownImg, ImageID img, float scale, bool invertedContentDimension, UI::LayoutParams *layoutParams)
+	CustomButton(uint64_t pspButtonBit, std::string_view key, bool toggle, bool repeat, uint64_t swipeUp, uint64_t swipeDown, uint64_t swipeLeft, uint64_t swipeRight, ControlMapper* controllMapper, ImageID bgImg, ImageID bgDownImg, ImageID img, float scale, bool invertedContentDimension, UI::LayoutParams *layoutParams)
 		: MultiTouchButton(key, bgImg, bgDownImg, img, scale, layoutParams), pspButtonBit_(pspButtonBit), toggle_(toggle), repeat_(repeat),
 		swipeUp_(swipeUp), swipeDown_(swipeDown), swipeLeft_(swipeLeft), swipeRight_(swipeRight),
 		controlMapper_(controllMapper), on_(false), invertedContentDimension_(invertedContentDimension) {
@@ -203,12 +203,12 @@ private:
 	bool toggle_;
 	bool repeat_;
 	int pressedFrames_ = 0;
-	int swipeUp_ = 0;
-	int swipeDown_ = 0;
-	int swipeLeft_ = 0;
-	int swipeRight_ = 0;
+	uint64_t swipeUp_ = 0;
+	uint64_t swipeDown_ = 0;
+	uint64_t swipeLeft_ = 0;
+	uint64_t swipeRight_ = 0;
 	int swipePointerId_ = -1;
-	int swipeActiveKey_ = 0;
+	uint64_t swipeActiveMask_ = 0;
 	float swipeDownX_ = 0.0f;
 	float swipeDownY_ = 0.0f;
 	float swipeThreshold_ = 0.0f;

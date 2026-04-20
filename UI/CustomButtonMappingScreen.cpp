@@ -126,11 +126,6 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	using namespace CustomKeyData;
 	auto co = GetI18NCategory(I18NCat::CONTROLS);
 	auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
-	static const char *swipeBinding[ARRAY_SIZE(CustomSwipeKey::keyList) + 1];
-	swipeBinding[0] = "None";
-	for (int i = 1; i < ARRAY_SIZE(swipeBinding); ++i) {
-		swipeBinding[i] = KeyMap::GetPspButtonNameCharPointer(CustomSwipeKey::keyList[i - 1]);
-	}
 	LinearLayout *root__ = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT, 1.0));
 	parent->Add(root__);
 	LinearLayout *leftColumn = new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(120, FILL_PARENT));
@@ -141,10 +136,20 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	ConfigCustomButton *cfg = nullptr;
 	bool *show = nullptr;
 	memset(array, 0, sizeof(array));
+	memset(swipeUpArray_, 0, sizeof(swipeUpArray_));
+	memset(swipeDownArray_, 0, sizeof(swipeDownArray_));
+	memset(swipeLeftArray_, 0, sizeof(swipeLeftArray_));
+	memset(swipeRightArray_, 0, sizeof(swipeRightArray_));
 	cfg = &g_Config.CustomButton[id_];
 	show = &touch.touchCustom[id_].show;
 	for (int i = 0; i < ARRAY_SIZE(g_customKeyList); i++)
 		array[i] = (0x01 == ((g_Config.CustomButton[id_].key >> i) & 0x01));
+	for (int i = 0; i < ARRAY_SIZE(CustomSwipeKey::keyList); i++) {
+		swipeUpArray_[i] = (cfg->swipeUp & (1ULL << i)) != 0;
+		swipeDownArray_[i] = (cfg->swipeDown & (1ULL << i)) != 0;
+		swipeLeftArray_[i] = (cfg->swipeLeft & (1ULL << i)) != 0;
+		swipeRightArray_[i] = (cfg->swipeRight & (1ULL << i)) != 0;
+	}
 
 	// TODO: Less hacky layout work
 	const Bounds layoutBounds = GetLayoutBounds(*screenManager()->getUIContext());
@@ -186,14 +191,35 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	vertLayout->Add(new CheckBox(&(cfg->toggle), co->T("Toggle mode")));
 	vertLayout->Add(new CheckBox(&(cfg->repeat), co->T("Repeat mode")));
 	vertLayout->Add(new ItemHeader(co->T("Swipe Binding")));
-	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeUp), mc->T("Swipe Up"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
-	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeDown), mc->T("Swipe Down"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
-	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeLeft), mc->T("Swipe Left"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
-	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeRight), mc->T("Swipe Right"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
-
 	const int cellSize = 400;
 	UI::GridLayoutSettings gridsettings(cellSize, 64, 5);
 	gridsettings.fillCells = true;
+
+	auto addSwipeGrid = [&](const char *title, bool *swipeArray) {
+		vertLayout->Add(new ItemHeader(mc->T(title)));
+		GridLayout *swipeGrid = vertLayout->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
+		for (int i = 0; i < ARRAY_SIZE(CustomSwipeKey::keyList); ++i) {
+			LinearLayout *row = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
+			row->SetSpacing(0);
+
+			CheckBox *checkbox = new CheckBox(&swipeArray[i], "", "", new LinearLayoutParams(50, WRAP_CONTENT));
+			row->Add(checkbox);
+
+			Choice *choice = new Choice(mc->T(KeyMap::GetPspButtonNameCharPointer(CustomSwipeKey::keyList[i])), new LinearLayoutParams(1.0f));
+			ChoiceEventHandler *choiceEventHandler = new ChoiceEventHandler(checkbox);
+			choice->OnClick.Handle(choiceEventHandler, &ChoiceEventHandler::onChoiceClick);
+			choice->SetCentered(true);
+
+			row->Add(choice);
+			swipeGrid->Add(row);
+		}
+	};
+
+	addSwipeGrid("Swipe Up", swipeUpArray_);
+	addSwipeGrid("Swipe Down", swipeDownArray_);
+	addSwipeGrid("Swipe Left", swipeLeftArray_);
+	addSwipeGrid("Swipe Right", swipeRightArray_);
+
 	GridLayout *grid = vertLayout->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
 
 	// Button image and action are defined in GamepadEmu.h
@@ -221,9 +247,10 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	}
 }
 
-static uint64_t arrayToInt(const bool ary[ARRAY_SIZE(CustomKeyData::g_customKeyList)]) {
+template <size_t N>
+static uint64_t arrayToInt(const bool (&ary)[N]) {
 	uint64_t value = 0;
-	for (int i = ARRAY_SIZE(CustomKeyData::g_customKeyList)-1; i >= 0; i--) {
+	for (int i = (int)N - 1; i >= 0; i--) {
 		value |= ary[i] ? 1 : 0;
 		if (i > 0) {
 			value = value << 1;
@@ -235,6 +262,10 @@ static uint64_t arrayToInt(const bool ary[ARRAY_SIZE(CustomKeyData::g_customKeyL
 void CustomButtonMappingScreen::saveArray() {
 	if (id_ >= 0 && id_ < TouchControlConfig::CUSTOM_BUTTON_COUNT) {
 		g_Config.CustomButton[id_].key = arrayToInt(array);
+		g_Config.CustomButton[id_].swipeUp = arrayToInt(swipeUpArray_);
+		g_Config.CustomButton[id_].swipeDown = arrayToInt(swipeDownArray_);
+		g_Config.CustomButton[id_].swipeLeft = arrayToInt(swipeLeftArray_);
+		g_Config.CustomButton[id_].swipeRight = arrayToInt(swipeRightArray_);
 	}
 }
 

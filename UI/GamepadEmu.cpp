@@ -271,18 +271,25 @@ bool CustomButton::Touch(const TouchInput &input) {
 	bool retval = MultiTouchButton::Touch(input);
 	bool down = pointerDownMask_ != 0;
 
-	auto sendSwipe = [this](int bindingIndex) {
-		if (bindingIndex <= 0 || bindingIndex > (int)ARRAY_SIZE(CustomSwipeKey::keyList)) {
+	auto sendSwipe = [this](uint64_t swipeMask) {
+		if (swipeMask == 0) {
 			return;
 		}
-		const uint32_t key = CustomSwipeKey::keyList[bindingIndex - 1];
-		controlMapper_->PSPKey(DEVICE_ID_TOUCH, key, KeyInputFlags::DOWN);
-		swipeActiveKey_ = (int)key;
+		for (int i = 0; i < ARRAY_SIZE(CustomSwipeKey::keyList); ++i) {
+			if (swipeMask & (1ULL << i)) {
+				controlMapper_->PSPKey(DEVICE_ID_TOUCH, CustomSwipeKey::keyList[i], KeyInputFlags::DOWN);
+			}
+		}
+		swipeActiveMask_ = swipeMask;
 	};
 	auto finishSwipe = [this]() {
-		if (swipeActiveKey_ != 0) {
-			controlMapper_->PSPKey(DEVICE_ID_TOUCH, swipeActiveKey_, KeyInputFlags::UP);
-			swipeActiveKey_ = 0;
+		if (swipeActiveMask_ != 0) {
+			for (int i = 0; i < ARRAY_SIZE(CustomSwipeKey::keyList); ++i) {
+				if (swipeActiveMask_ & (1ULL << i)) {
+					controlMapper_->PSPKey(DEVICE_ID_TOUCH, CustomSwipeKey::keyList[i], KeyInputFlags::UP);
+				}
+			}
+			swipeActiveMask_ = 0;
 		}
 		swipePointerId_ = -1;
 		swipeThreshold_ = 0.0f;
@@ -295,7 +302,7 @@ bool CustomButton::Touch(const TouchInput &input) {
 		swipePointerId_ = input.id;
 		swipeDownX_ = input.x;
 		swipeDownY_ = input.y;
-		swipeActiveKey_ = 0;
+		swipeActiveMask_ = 0;
 		swipeThreshold_ = std::clamp(std::min(bounds_.w, bounds_.h) * 0.08f, 4.0f, 12.0f);
 
 		if (!repeat_) {
@@ -317,7 +324,7 @@ bool CustomButton::Touch(const TouchInput &input) {
 		on_ = false;
 	}
 
-	if (swipePointerId_ == input.id && swipeActiveKey_ == 0 && (input.flags & TouchInputFlags::MOVE)) {
+	if (swipePointerId_ == input.id && swipeActiveMask_ == 0 && (input.flags & TouchInputFlags::MOVE)) {
 		float dx = (input.x - swipeDownX_) * g_display.dpi_scale_x;
 		float dy = (input.y - swipeDownY_) * g_display.dpi_scale_y;
 		rotateTouchHelper(dx, dy);

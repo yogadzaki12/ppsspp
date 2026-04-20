@@ -46,6 +46,10 @@ private:
 	void saveArray();
 
 	bool array[ARRAY_SIZE(CustomKeyData::g_customKeyList)]{};
+	bool swipeUpArray_[ARRAY_SIZE(CustomSwipeKey::keyList)]{};
+	bool swipeDownArray_[ARRAY_SIZE(CustomSwipeKey::keyList)]{};
+	bool swipeLeftArray_[ARRAY_SIZE(CustomSwipeKey::keyList)]{};
+	bool swipeRightArray_[ARRAY_SIZE(CustomSwipeKey::keyList)]{};
 	int id_;
 
 	class ChoiceEventHandler{
