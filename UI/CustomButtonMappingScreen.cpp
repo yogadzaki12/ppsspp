@@ -126,6 +126,11 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	using namespace CustomKeyData;
 	auto co = GetI18NCategory(I18NCat::CONTROLS);
 	auto mc = GetI18NCategory(I18NCat::MAPPABLECONTROLS);
+	static const char *swipeBinding[ARRAY_SIZE(CustomSwipeKey::keyList) + 1];
+	swipeBinding[0] = "None";
+	for (int i = 1; i < ARRAY_SIZE(swipeBinding); ++i) {
+		swipeBinding[i] = KeyMap::GetPspButtonNameCharPointer(CustomSwipeKey::keyList[i - 1]);
+	}
 	LinearLayout *root__ = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT, 1.0));
 	parent->Add(root__);
 	LinearLayout *leftColumn = new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(120, FILL_PARENT));
@@ -180,6 +185,11 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	vertLayout->Add(new ItemHeader(co->T("Button Binding")));
 	vertLayout->Add(new CheckBox(&(cfg->toggle), co->T("Toggle mode")));
 	vertLayout->Add(new CheckBox(&(cfg->repeat), co->T("Repeat mode")));
+	vertLayout->Add(new ItemHeader(co->T("Swipe Binding")));
+	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeUp), mc->T("Swipe Up"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
+	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeDown), mc->T("Swipe Down"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
+	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeLeft), mc->T("Swipe Left"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
+	vertLayout->Add(new PopupMultiChoice(&(cfg->swipeRight), mc->T("Swipe Right"), swipeBinding, 0, ARRAY_SIZE(swipeBinding), I18NCat::MAPPABLECONTROLS, screenManager()));
 
 	const int cellSize = 400;
 	UI::GridLayoutSettings gridsettings(cellSize, 64, 5);

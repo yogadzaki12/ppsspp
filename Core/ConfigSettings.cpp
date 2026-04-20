@@ -167,6 +167,18 @@ bool ConfigSetting::ReadFromIniSection(ConfigBlock *configBlock, const Section *
 		if (!section || (!section->Get(ini5_, &customButton->repeat) && applyDefaultIfMissing)) {
 			customButton->repeat = defaultCustomButton.repeat;
 		}
+		if (ini6_ && (!section || (!section->Get(ini6_, &customButton->swipeUp) && applyDefaultIfMissing))) {
+			customButton->swipeUp = defaultCustomButton.swipeUp;
+		}
+		if (ini7_ && (!section || (!section->Get(ini7_, &customButton->swipeDown) && applyDefaultIfMissing))) {
+			customButton->swipeDown = defaultCustomButton.swipeDown;
+		}
+		if (ini8_ && (!section || (!section->Get(ini8_, &customButton->swipeLeft) && applyDefaultIfMissing))) {
+			customButton->swipeLeft = defaultCustomButton.swipeLeft;
+		}
+		if (ini9_ && (!section || (!section->Get(ini9_, &customButton->swipeRight) && applyDefaultIfMissing))) {
+			customButton->swipeRight = defaultCustomButton.swipeRight;
+		}
 		return true;
 	}
 	default:
@@ -227,6 +239,18 @@ void ConfigSetting::WriteToIniSection(const ConfigBlock *configBlock, Section *s
 		section->Set(ini3_, customButton->shape);
 		section->Set(ini4_, customButton->toggle);
 		section->Set(ini5_, customButton->repeat);
+		if (ini6_) {
+			section->Set(ini6_, customButton->swipeUp);
+		}
+		if (ini7_) {
+			section->Set(ini7_, customButton->swipeDown);
+		}
+		if (ini8_) {
+			section->Set(ini8_, customButton->swipeLeft);
+		}
+		if (ini9_) {
+			section->Set(ini9_, customButton->swipeRight);
+		}
 		return;
 	}
 	default:

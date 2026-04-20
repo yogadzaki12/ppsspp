@@ -67,11 +67,15 @@ struct ConfigTouchPos {
 };
 
 struct ConfigCustomButton {
-	uint64_t key;
-	int image;
-	int shape;
-	bool toggle;
-	bool repeat;
+	uint64_t key = 0;
+	int image = 0;
+	int shape = 0;
+	bool toggle = false;
+	bool repeat = false;
+	int swipeUp = 0;
+	int swipeDown = 0;
+	int swipeLeft = 0;
+	int swipeRight = 0;
 };
 
 enum class CPUCore {

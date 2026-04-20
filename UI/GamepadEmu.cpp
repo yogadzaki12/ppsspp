@@ -271,9 +271,23 @@ bool CustomButton::Touch(const TouchInput &input) {
 	bool retval = MultiTouchButton::Touch(input);
 	bool down = pointerDownMask_ != 0;
 
+	auto sendSwipe = [this](int bindingIndex) {
+		if (bindingIndex <= 0 || bindingIndex > (int)ARRAY_SIZE(CustomSwipeKey::keyList)) {
+			return;
+		}
+		const uint32_t key = CustomSwipeKey::keyList[bindingIndex - 1];
+		controlMapper_->PSPKey(DEVICE_ID_TOUCH, key, KeyInputFlags::DOWN);
+		controlMapper_->PSPKey(DEVICE_ID_TOUCH, key, KeyInputFlags::UP);
+	};
+
 	if (down && !lastDown) {
 		if (g_Config.bHapticFeedback)
 			System_Vibrate(HAPTIC_VIRTUAL_KEY);
+
+		swipePointerId_ = input.id;
+		swipeDownX_ = input.x;
+		swipeDownY_ = input.y;
+		swipeTriggered_ = false;
 
 		if (!repeat_) {
 			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); i++) {
@@ -292,6 +306,36 @@ bool CustomButton::Touch(const TouchInput &input) {
 			}
 		}
 		on_ = false;
+	}
+
+	if (!swipeTriggered_ && swipePointerId_ == input.id && (input.flags & TouchInputFlags::MOVE) && down) {
+		float dx = (input.x - swipeDownX_) * g_display.dpi_scale_x;
+		float dy = (input.y - swipeDownY_) * g_display.dpi_scale_y;
+		rotateTouchHelper(dx, dy);
+
+		static constexpr float SWIPE_THRESHOLD = 28.0f;
+		if (fabsf(dx) > fabsf(dy)) {
+			if (dx > SWIPE_THRESHOLD) {
+				sendSwipe(swipeRight_);
+				swipeTriggered_ = true;
+			} else if (dx < -SWIPE_THRESHOLD) {
+				sendSwipe(swipeLeft_);
+				swipeTriggered_ = true;
+			}
+		} else {
+			if (dy > SWIPE_THRESHOLD) {
+				sendSwipe(swipeDown_);
+				swipeTriggered_ = true;
+			} else if (dy < -SWIPE_THRESHOLD) {
+				sendSwipe(swipeUp_);
+				swipeTriggered_ = true;
+			}
+		}
+	}
+
+	if ((input.flags & TouchInputFlags::UP) && swipePointerId_ == input.id) {
+		swipePointerId_ = -1;
+		swipeTriggered_ = false;
 	}
 	return retval;
 }
@@ -1025,7 +1069,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 			_dbg_assert_(cfg.image < ARRAY_SIZE(customKeyImages));
 
 			// Note: cfg.shape and cfg.image are bounds-checked elsewhere.
-			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, controlMapper,
+			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, cfg.swipeUp, cfg.swipeDown, cfg.swipeLeft, cfg.swipeRight, controlMapper,
 					g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyShapes[cfg.shape].i,
 					customKeyImages[cfg.image].i, touch.scale, customKeyShapes[cfg.shape].d, buttonLayoutParams(touch)));
 			aux->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);

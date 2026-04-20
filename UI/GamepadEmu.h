@@ -186,8 +186,10 @@ const int baseActionButtonSpacing = 60;
 // Customizable buttons, press a combination of buttons specified by pspButtonBit.
 class CustomButton : public MultiTouchButton {
 public:
-	CustomButton(uint64_t pspButtonBit, std::string_view key, bool toggle, bool repeat, ControlMapper* controllMapper, ImageID bgImg, ImageID bgDownImg, ImageID img, float scale, bool invertedContentDimension, UI::LayoutParams *layoutParams)
-		: MultiTouchButton(key, bgImg, bgDownImg, img, scale, layoutParams), pspButtonBit_(pspButtonBit), toggle_(toggle), repeat_(repeat), controlMapper_(controllMapper), on_(false), invertedContentDimension_(invertedContentDimension) {
+	CustomButton(uint64_t pspButtonBit, std::string_view key, bool toggle, bool repeat, int swipeUp, int swipeDown, int swipeLeft, int swipeRight, ControlMapper* controllMapper, ImageID bgImg, ImageID bgDownImg, ImageID img, float scale, bool invertedContentDimension, UI::LayoutParams *layoutParams)
+		: MultiTouchButton(key, bgImg, bgDownImg, img, scale, layoutParams), pspButtonBit_(pspButtonBit), toggle_(toggle), repeat_(repeat),
+		swipeUp_(swipeUp), swipeDown_(swipeDown), swipeLeft_(swipeLeft), swipeRight_(swipeRight),
+		controlMapper_(controllMapper), on_(false), invertedContentDimension_(invertedContentDimension) {
 	}
 	bool Touch(const TouchInput &input) override;
 	void Update() override;
@@ -201,6 +203,14 @@ private:
 	bool toggle_;
 	bool repeat_;
 	int pressedFrames_ = 0;
+	int swipeUp_ = 0;
+	int swipeDown_ = 0;
+	int swipeLeft_ = 0;
+	int swipeRight_ = 0;
+	int swipePointerId_ = -1;
+	float swipeDownX_ = 0.0f;
+	float swipeDownY_ = 0.0f;
+	bool swipeTriggered_ = false;
 	ControlMapper* controlMapper_;
 	bool on_;
 	bool invertedContentDimension_; // Swap width and height
@@ -394,6 +404,50 @@ namespace GestureKey {
 		VIRTKEY_PREVIOUS_SLOT,
 		VIRTKEY_NEXT_SLOT,
 		VIRTKEY_TEXTURE_DUMP, 
+		VIRTKEY_TEXTURE_REPLACE,
+		VIRTKEY_SCREENSHOT,
+		VIRTKEY_MUTE_TOGGLE,
+		VIRTKEY_OPENCHAT,
+		VIRTKEY_PAUSE,
+		VIRTKEY_DEVMENU,
+#ifndef MOBILE_DEVICE
+		VIRTKEY_RECORD,
+#endif
+		VIRTKEY_AXIS_RIGHT_X_MIN,
+		VIRTKEY_AXIS_RIGHT_Y_MIN,
+		VIRTKEY_AXIS_RIGHT_X_MAX,
+		VIRTKEY_AXIS_RIGHT_Y_MAX,
+		VIRTKEY_TOGGLE_DEBUGGER,
+		VIRTKEY_TOGGLE_TILT,
+	};
+}
+
+namespace CustomSwipeKey {
+	// Custom button swipe bindings use a dedicated list to avoid relying on the button bitmask mapping.
+	static const uint32_t keyList[] = {
+		CTRL_SQUARE,
+		CTRL_TRIANGLE,
+		CTRL_CIRCLE,
+		CTRL_CROSS,
+		CTRL_UP,
+		CTRL_DOWN,
+		CTRL_LEFT,
+		CTRL_RIGHT,
+		CTRL_START,
+		CTRL_SELECT,
+		CTRL_LTRIGGER,
+		CTRL_RTRIGGER,
+		VIRTKEY_AXIS_Y_MAX,
+		VIRTKEY_AXIS_Y_MIN,
+		VIRTKEY_AXIS_X_MIN,
+		VIRTKEY_AXIS_X_MAX,
+		VIRTKEY_SPEED_TOGGLE,
+		VIRTKEY_REWIND,
+		VIRTKEY_SAVE_STATE,
+		VIRTKEY_LOAD_STATE,
+		VIRTKEY_PREVIOUS_SLOT,
+		VIRTKEY_NEXT_SLOT,
+		VIRTKEY_TEXTURE_DUMP,
 		VIRTKEY_TEXTURE_REPLACE,
 		VIRTKEY_SCREENSHOT,
 		VIRTKEY_MUTE_TOGGLE,
