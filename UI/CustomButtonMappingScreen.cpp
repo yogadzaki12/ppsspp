@@ -190,7 +190,6 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	vertLayout->Add(new ItemHeader(co->T("Button Binding")));
 	vertLayout->Add(new CheckBox(&(cfg->toggle), co->T("Toggle mode")));
 	vertLayout->Add(new CheckBox(&(cfg->repeat), co->T("Repeat mode")));
-	vertLayout->Add(new ItemHeader(co->T("Swipe Binding")));
 	const int cellSize = 400;
 	UI::GridLayoutSettings gridsettings(cellSize, 64, 5);
 	gridsettings.fillCells = true;
@@ -214,11 +213,6 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 			swipeGrid->Add(row);
 		}
 	};
-
-	addSwipeGrid("Swipe Up", swipeUpArray_);
-	addSwipeGrid("Swipe Down", swipeDownArray_);
-	addSwipeGrid("Swipe Left", swipeLeftArray_);
-	addSwipeGrid("Swipe Right", swipeRightArray_);
 
 	GridLayout *grid = vertLayout->Add(new GridLayout(gridsettings, new LayoutParams(FILL_PARENT, WRAP_CONTENT)));
 
@@ -245,6 +239,11 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 		row->Add(choice);
 		grid->Add(row);
 	}
+
+	addSwipeGrid("Swipe Up", swipeUpArray_);
+	addSwipeGrid("Swipe Down", swipeDownArray_);
+	addSwipeGrid("Swipe Left", swipeLeftArray_);
+	addSwipeGrid("Swipe Right", swipeRightArray_);
 }
 
 template <size_t N>
