@@ -183,7 +183,7 @@ void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
 		for (int i = 0; i < Config::EMOTION_BUTTON_ITEM_COUNT; ++i) {
 			char temp[32];
 			snprintf(temp, sizeof(temp), "Emotion %d", i + 1);
-			items.push_back(mc->T(temp));
+				items.push_back(std::string(mc->T(temp)));
 		}
 
 		auto *popup = new ListPopupScreen(mc->T("Emotion"), items, -1, [=](int index) {
