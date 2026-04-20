@@ -167,6 +167,12 @@ bool ConfigSetting::ReadFromIniSection(ConfigBlock *configBlock, const Section *
 		if (!section || (!section->Get(ini5_, &customButton->repeat) && applyDefaultIfMissing)) {
 			customButton->repeat = defaultCustomButton.repeat;
 		}
+		if (!section || (!section->Get(ini6_, &customButton->summaryShow) && applyDefaultIfMissing)) {
+			customButton->summaryShow = defaultCustomButton.summaryShow;
+		}
+		if (!section || (!section->Get(ini7_, &customButton->summaryText) && applyDefaultIfMissing)) {
+			customButton->summaryText = defaultCustomButton.summaryText;
+		}
 		return true;
 	}
 	default:
@@ -227,6 +233,8 @@ void ConfigSetting::WriteToIniSection(const ConfigBlock *configBlock, Section *s
 		section->Set(ini3_, customButton->shape);
 		section->Set(ini4_, customButton->toggle);
 		section->Set(ini5_, customButton->repeat);
+		section->Set(ini6_, customButton->summaryShow);
+		section->Set(ini7_, customButton->summaryText);
 		return;
 	}
 	default:

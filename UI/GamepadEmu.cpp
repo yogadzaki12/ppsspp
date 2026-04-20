@@ -326,6 +326,22 @@ void CustomButton::Update() {
 	}
 }
 
+void CustomButton::Draw(UIContext &dc) {
+	MultiTouchButton::Draw(dc);
+
+	if (!summaryShow_ || summaryText_.empty()) {
+		return;
+	}
+
+	float opacity = g_gamepadOpacity;
+	if (opacity <= 0.0f) {
+		return;
+	}
+
+	uint32_t textColor = colorAlpha(0xFFFFFF, std::max(opacity, 0.6f));
+	dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y2() + 14.0f * scale_, textColor, ALIGN_HCENTER | FLAG_WRAP_TEXT);
+}
+
 bool PSPButton::IsDownVisually() const {
 	return (__CtrlPeekButtonsVisual() & pspButtonBit_) != 0;
 }
@@ -1025,7 +1041,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 			_dbg_assert_(cfg.image < ARRAY_SIZE(customKeyImages));
 
 			// Note: cfg.shape and cfg.image are bounds-checked elsewhere.
-			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, controlMapper,
+			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, cfg.summaryShow, cfg.summaryText, controlMapper,
 					g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyShapes[cfg.shape].i,
 					customKeyImages[cfg.image].i, touch.scale, customKeyShapes[cfg.shape].d, buttonLayoutParams(touch)));
 			aux->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);

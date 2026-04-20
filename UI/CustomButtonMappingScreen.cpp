@@ -156,6 +156,7 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	
 	vertLayout->Add(new ItemHeader(co->T("Button style")));
 	vertLayout->Add(new CheckBox(show, co->T("Visible")));
+	vertLayout->Add(new CheckBox(&(cfg->summaryShow), co->T("Summary")));
 
 	Choice *icon = vertLayout->Add(new Choice(co->T("Icon")));
 	icon->SetIconRight(ImageID(customKeyImages[cfg->image].i), 1.0f, customKeyImages[cfg->image].r*PI/180, false, false); // Set right icon on the choice
@@ -176,6 +177,8 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 
 		screenManager()->push(shape);
 	});
+
+	vertLayout->Add(new PopupTextInputChoice(GetRequesterToken(), &(cfg->summaryText), co->T("Summary text"), co->T("Summary text"), 48, screenManager()));
 
 	vertLayout->Add(new ItemHeader(co->T("Button Binding")));
 	vertLayout->Add(new CheckBox(&(cfg->toggle), co->T("Toggle mode")));
