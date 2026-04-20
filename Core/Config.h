@@ -502,6 +502,8 @@ public:
 	ConfigCustomButton CustomButton[TouchControlConfig::CUSTOM_BUTTON_COUNT];
 	bool bCustomButtonSummary[TouchControlConfig::CUSTOM_BUTTON_COUNT]{};
 	std::string sCustomButtonSummaryText[TouchControlConfig::CUSTOM_BUTTON_COUNT];
+	int iCustomButtonSummaryPosition[TouchControlConfig::CUSTOM_BUTTON_COUNT]{};
+	int iCustomButtonSummaryMargin[TouchControlConfig::CUSTOM_BUTTON_COUNT]{};
 
 	// Ignored on iOS and other platforms that lack pause.
 	bool bShowTouchPause;

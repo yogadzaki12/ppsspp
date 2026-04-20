@@ -326,6 +326,13 @@ void CustomButton::Update() {
 	}
 }
 
+std::string CustomButton::DescribeText() const {
+	if (summaryShow_ && !summaryText_.empty()) {
+		return summaryText_;
+	}
+	return GamepadComponent::DescribeText();
+}
+
 void CustomButton::Draw(UIContext &dc) {
 	MultiTouchButton::Draw(dc);
 
@@ -338,8 +345,29 @@ void CustomButton::Draw(UIContext &dc) {
 		return;
 	}
 
-	uint32_t textColor = colorAlpha(0xFFFFFF, std::max(opacity, 0.6f));
-	dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y2() + 14.0f * scale_, textColor, ALIGN_HCENTER | FLAG_WRAP_TEXT);
+	static constexpr float marginSizes[] = { 0.0f, 6.0f, 12.0f, 20.0f };
+	const int position = std::clamp(summaryPosition_, 0, 4);
+	const int margin = std::clamp(summaryMargin_, 0, 3);
+	const float offset = marginSizes[margin] * scale_;
+	const uint32_t textColor = colorAlpha(0xFFFFFF, std::max(opacity, 0.6f));
+
+	switch (position) {
+	case 0:
+		dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.centerY(), textColor, ALIGN_HCENTER | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+		break;
+	case 1:
+		dc.DrawTextShadow(summaryText_, bounds_.x - offset, bounds_.centerY(), textColor, ALIGN_RIGHT | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+		break;
+	case 2:
+		dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y2() + offset, textColor, ALIGN_HCENTER | ALIGN_TOP | FLAG_WRAP_TEXT);
+		break;
+	case 3:
+		dc.DrawTextShadow(summaryText_, bounds_.x2() + offset, bounds_.centerY(), textColor, ALIGN_LEFT | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+		break;
+	case 4:
+		dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y - offset, textColor, ALIGN_HCENTER | ALIGN_BOTTOM | FLAG_WRAP_TEXT);
+		break;
+	}
 }
 
 bool PSPButton::IsDownVisually() const {
@@ -1034,14 +1062,14 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		}
 		return nullptr;
 	};
-	auto addCustomButton = [this, buttonLayoutParams, controlMapper](const ConfigCustomButton& cfg, bool summaryShow, const std::string &summaryText, const char *key, const ConfigTouchPos &touch) -> CustomButton * {
+	auto addCustomButton = [this, buttonLayoutParams, controlMapper](const ConfigCustomButton& cfg, bool summaryShow, const std::string &summaryText, int summaryPosition, int summaryMargin, const char *key, const ConfigTouchPos &touch) -> CustomButton * {
 		using namespace CustomKeyData;
 		if (touch.show) {
 			_dbg_assert_(cfg.shape < ARRAY_SIZE(customKeyShapes));
 			_dbg_assert_(cfg.image < ARRAY_SIZE(customKeyImages));
 
 			// Note: cfg.shape and cfg.image are bounds-checked elsewhere.
-			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, summaryShow, summaryText, controlMapper,
+			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, summaryShow, summaryText, summaryPosition, summaryMargin, controlMapper,
 					g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyShapes[cfg.shape].i,
 					customKeyImages[cfg.image].i, touch.scale, customKeyShapes[cfg.shape].d, buttonLayoutParams(touch)));
 			aux->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
@@ -1112,7 +1140,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 
 		char temp[64];
 		snprintf(temp, sizeof(temp), "Custom %d button", i + 1);
-		addCustomButton(g_Config.CustomButton[i], g_Config.bCustomButtonSummary[i], g_Config.sCustomButtonSummaryText[i], temp, config.touchCustom[i]);
+		addCustomButton(g_Config.CustomButton[i], g_Config.bCustomButtonSummary[i], g_Config.sCustomButtonSummaryText[i], g_Config.iCustomButtonSummaryPosition[i], g_Config.iCustomButtonSummaryMargin[i], temp, config.touchCustom[i]);
 	}
 
 	// Add the two gesture zones.

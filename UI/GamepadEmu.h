@@ -186,12 +186,13 @@ const int baseActionButtonSpacing = 60;
 // Customizable buttons, press a combination of buttons specified by pspButtonBit.
 class CustomButton : public MultiTouchButton {
 public:
-	CustomButton(uint64_t pspButtonBit, std::string_view key, bool toggle, bool repeat, bool summaryShow, std::string_view summaryText, ControlMapper* controllMapper, ImageID bgImg, ImageID bgDownImg, ImageID img, float scale, bool invertedContentDimension, UI::LayoutParams *layoutParams)
-		: MultiTouchButton(key, bgImg, bgDownImg, img, scale, layoutParams), pspButtonBit_(pspButtonBit), toggle_(toggle), repeat_(repeat), controlMapper_(controllMapper), on_(false), invertedContentDimension_(invertedContentDimension), summaryShow_(summaryShow), summaryText_(summaryText) {
+	CustomButton(uint64_t pspButtonBit, std::string_view key, bool toggle, bool repeat, bool summaryShow, std::string_view summaryText, int summaryPosition, int summaryMargin, ControlMapper* controllMapper, ImageID bgImg, ImageID bgDownImg, ImageID img, float scale, bool invertedContentDimension, UI::LayoutParams *layoutParams)
+		: MultiTouchButton(key, bgImg, bgDownImg, img, scale, layoutParams), pspButtonBit_(pspButtonBit), toggle_(toggle), repeat_(repeat), controlMapper_(controllMapper), on_(false), invertedContentDimension_(invertedContentDimension), summaryShow_(summaryShow), summaryText_(summaryText), summaryPosition_(summaryPosition), summaryMargin_(summaryMargin) {
 	}
 	bool Touch(const TouchInput &input) override;
 	void Update() override;
 	void Draw(UIContext &dc) override;
+	std::string DescribeText() const override;
 
 	bool IsDownVisually() const override;  // For visual purpose
 	bool IsDownByTouch() const override;
@@ -207,6 +208,8 @@ private:
 	bool invertedContentDimension_; // Swap width and height
 	bool summaryShow_;
 	std::string summaryText_;
+	int summaryPosition_;
+	int summaryMargin_;
 };
 
 struct GestureControlConfig;
