@@ -277,7 +277,15 @@ bool CustomButton::Touch(const TouchInput &input) {
 		}
 		const uint32_t key = CustomSwipeKey::keyList[bindingIndex - 1];
 		controlMapper_->PSPKey(DEVICE_ID_TOUCH, key, KeyInputFlags::DOWN);
-		controlMapper_->PSPKey(DEVICE_ID_TOUCH, key, KeyInputFlags::UP);
+		swipeActiveKey_ = (int)key;
+	};
+	auto finishSwipe = [this]() {
+		if (swipeActiveKey_ != 0) {
+			controlMapper_->PSPKey(DEVICE_ID_TOUCH, swipeActiveKey_, KeyInputFlags::UP);
+			swipeActiveKey_ = 0;
+		}
+		swipePointerId_ = -1;
+		swipeThreshold_ = 0.0f;
 	};
 
 	if (down && !lastDown) {
@@ -287,7 +295,8 @@ bool CustomButton::Touch(const TouchInput &input) {
 		swipePointerId_ = input.id;
 		swipeDownX_ = input.x;
 		swipeDownY_ = input.y;
-		swipeTriggered_ = false;
+		swipeActiveKey_ = 0;
+		swipeThreshold_ = std::clamp(std::min(bounds_.w, bounds_.h) * 0.08f, 4.0f, 12.0f);
 
 		if (!repeat_) {
 			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); i++) {
@@ -308,34 +317,31 @@ bool CustomButton::Touch(const TouchInput &input) {
 		on_ = false;
 	}
 
-	if (!swipeTriggered_ && swipePointerId_ == input.id && (input.flags & TouchInputFlags::MOVE)) {
+	if (swipePointerId_ == input.id && swipeActiveKey_ == 0 && (input.flags & TouchInputFlags::MOVE)) {
 		float dx = (input.x - swipeDownX_) * g_display.dpi_scale_x;
 		float dy = (input.y - swipeDownY_) * g_display.dpi_scale_y;
 		rotateTouchHelper(dx, dy);
 
-		static constexpr float SWIPE_THRESHOLD = 28.0f;
 		if (fabsf(dx) > fabsf(dy)) {
-			if (dx > SWIPE_THRESHOLD) {
+			if (dx > swipeThreshold_) {
 				sendSwipe(swipeRight_);
-				swipeTriggered_ = true;
-			} else if (dx < -SWIPE_THRESHOLD) {
+			} else if (dx < -swipeThreshold_) {
 				sendSwipe(swipeLeft_);
-				swipeTriggered_ = true;
 			}
 		} else {
-			if (dy > SWIPE_THRESHOLD) {
+			if (dy > swipeThreshold_) {
 				sendSwipe(swipeDown_);
-				swipeTriggered_ = true;
-			} else if (dy < -SWIPE_THRESHOLD) {
+			} else if (dy < -swipeThreshold_) {
 				sendSwipe(swipeUp_);
-				swipeTriggered_ = true;
 			}
 		}
 	}
 
-	if ((input.flags & TouchInputFlags::UP) && swipePointerId_ == input.id) {
-		swipePointerId_ = -1;
-		swipeTriggered_ = false;
+	if ((input.flags & (TouchInputFlags::UP | TouchInputFlags::CANCEL | TouchInputFlags::RELEASE_ALL)) && swipePointerId_ == input.id) {
+		finishSwipe();
+	}
+	if (input.flags & TouchInputFlags::RELEASE_ALL) {
+		finishSwipe();
 	}
 	return retval;
 }

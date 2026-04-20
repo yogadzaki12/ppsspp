@@ -208,9 +208,10 @@ private:
 	int swipeLeft_ = 0;
 	int swipeRight_ = 0;
 	int swipePointerId_ = -1;
+	int swipeActiveKey_ = 0;
 	float swipeDownX_ = 0.0f;
 	float swipeDownY_ = 0.0f;
-	bool swipeTriggered_ = false;
+	float swipeThreshold_ = 0.0f;
 	ControlMapper* controlMapper_;
 	bool on_;
 	bool invertedContentDimension_; // Swap width and height
