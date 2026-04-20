@@ -1142,7 +1142,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 			NONE,
 			Centering::Both)));
 		emotionList_->SetBG(Drawable(0xC0202020));
-		emotionList_->SetVisibility(V_GONE);
+		emotionList_->SetVisibility(UI::V_GONE);
 		emotionList_->SetSpacing(2.0f);
 
 		auto triggerEmotion = [this](uint64_t mask) {
@@ -1162,7 +1162,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 			item->SetCentered(true);
 			item->OnClick.Add([this, triggerEmotion, i](UI::EventParams &) {
 				triggerEmotion(g_Config.EmotionButton[i]);
-				emotionList_->SetVisibility(V_GONE);
+				emotionList_->SetVisibility(UI::V_GONE);
 				emotionButtonDown_ = false;
 			});
 		}
@@ -1170,7 +1170,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		if (emotionButton) {
 			emotionButton->OnChange.Add([this](UI::EventParams &e) {
 				if (e.a) {
-					emotionList_->SetVisibility(emotionList_->GetVisibility() == V_VISIBLE ? V_GONE : V_VISIBLE);
+					emotionList_->SetVisibility(emotionList_->GetVisibility() == UI::V_VISIBLE ? UI::V_GONE : UI::V_VISIBLE);
 				}
 			});
 		}
@@ -1222,10 +1222,10 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 }
 
 bool GamepadEmuView::Touch(const TouchInput &input) {
-	if (emotionList_ && emotionList_->GetVisibility() == V_VISIBLE) {
+	if (emotionList_ && emotionList_->GetVisibility() == UI::V_VISIBLE) {
 		if (input.flags & TouchInputFlags::DOWN) {
 			if (!emotionList_->GetBounds().Contains(input.x, input.y)) {
-				emotionList_->SetVisibility(V_GONE);
+				emotionList_->SetVisibility(UI::V_GONE);
 				emotionButtonDown_ = false;
 				return true;
 			}
