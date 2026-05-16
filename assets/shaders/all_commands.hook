@@ -1,0 +1,174 @@
+// ==Hook==
+Name = Shader Hook Command Showcase
+Author = Name
+GameID = *
+Stage = Fragment
+Point = BeforeFinalColor
+Enabled = false
+
+// ========================================
+// FILE LOCATION
+// ========================================
+// This .hook file MUST be placed in:
+//   {PSP_Directory}/shaders/
+//
+// Where {PSP_Directory} is the path you configured during emulator setup (e.g., "PSP" folder on your memory stick).
+// The emulator scans this directory at startup and loads all enabled .hook files automatically.
+// 
+// EXAMPLE PATH STRUCTURE:
+//   If your PSP directory is: /home/user/PSP/
+//   Then .hook files should be in: /home/user/PSP/shaders/
+//
+// ========================================
+// HOOK FILE SYNTAX
+// ========================================
+
+// HookPoint options (choose one in the header `Point` field):
+// - BeforeLighting:    Apply transforms to vertex color before lighting/texture processing.
+// - BeforeTexture:     Apply transforms to sampled texture immediately after texture sampling.
+// - AfterLighting:     Apply transforms after lighting and texture blending are computed.
+// - AfterTexture:      Apply transforms after texture application but before fog.
+// - BeforeFog:         Apply transforms to color before fog processing.
+// - AfterFog:          Apply transforms after fog calculations (if fog is enabled).
+// - BeforeBlend:       Apply transforms before framebuffer blending (alpha/logic ops).
+// - AfterBlend:        Apply transforms after framebuffer blending is complete.
+// - BeforeFinalColor:  Apply final color transforms immediately before writing the fragment output.
+//
+// Short usage notes:
+// - Choose the `Point` value that best matches your shader operation's semantic intent.
+// - Use `Stage = Fragment` to target the fragment shader. (Note: `Stage = Vertex` is currently NOT supported - vertex shader hooks are not yet implemented.)
+// - `GameID` supports `*` as a wildcard to match any game, or specify exact game IDs.
+// - Lines starting with `//` are comments and ignored by the parser.
+// - For best results, place commands in hooks targeting the recommended `Point` (see categories below).
+//
+// ==Code==
+
+// NOTE: The following command list is grouped by category with a recommended `Point` where
+// the command is most appropriate. The parser accepts any of these commands, but to have
+// predictable behavior you should place commands in hooks that target the recommended
+// `Point` (e.g., `Point = BeforeTexture`, `Point = AfterLighting`, `Point = AfterFog`,
+// `Point = BeforeBlend`, `Point = BeforeFinalColor`). Some commands operate on different
+// shader variables and therefore cannot be meaningfully combined in the same hook if the
+// hook's `Point` differs; in such cases create separate hook files or use different `Point`.
+
+// ========================================
+// LIGHTING COMMANDS (recommended Point: AfterLighting)
+// ========================================
+// - Affects computed lighting/specular/emission components after lighting pass.
+// - These reduce brightness components by multiplying with a factor (0.0-1.0 = darker, >1.0 = brighter).
+
+// Reduce bloom/bright highlights by 30% (multiplied by 0.70)
+ReduceBloom(0.70);
+
+// Clamp lighting to max value 1.05 to prevent HDR overflow/oversaturation
+ClampLighting(1.05);
+
+// Reduce specular highlights by 20%
+ReduceSpecular(0.80);
+
+// Reduce glow effects by 35%
+ReduceGlow(0.65);
+
+// Reduce emissive/self-lit surfaces by 25%
+ReduceEmission(0.75);
+
+// Reduce overbright areas by 10%
+ReduceOverbright(0.90);
+
+// ========================================
+// BLEND COMMANDS (recommended Point: BeforeBlend)
+// ========================================
+// - Adjust blend behavior or force opaque before blending with the framebuffer.
+// - These control how fragments are combined with the framebuffer.
+
+// Reduce additive blending effects (bright overlays) by 40%
+ReduceAdditiveBlend(0.60);
+
+// Reduce alpha/transparency blending by 45%
+ReduceAlphaBlend(0.55);
+
+// Force fragment opacity to 1.0 (fully opaque, ignore alpha)
+ForceOpaque(1.00);
+
+// ========================================
+// PARTICLE COMMANDS (recommended Point: AfterLighting)
+// ========================================
+// - Particle-specific reductions; apply after lighting so it affects rendered particle color.
+// - Use these to reduce particle visual impact.
+
+// Reduce all particle brightness by 15%
+ReduceParticles(0.85);
+
+// Completely disable/hide particles (zeroes RGB)
+DisableParticles();
+
+// Reduce particle brightness by 10%
+ReduceParticleBrightness(0.90);
+
+// ========================================
+// FOG COMMANDS (recommended Point: BeforeFog)
+// ========================================
+// - Modify fog inputs or disable fog BEFORE it is applied to the color.
+// - Note: These commands must use Point=BeforeFog, not AfterFog, because they operate on the
+//   fog calculation state before it's applied. AfterFog is for color transforms AFTER fog is already applied.
+
+// Reduce fog density by 20% (makes distant objects more visible)
+ReduceFogDensity(0.80);
+
+// Completely disable fog effect (zeroes RGB in fog calculation)
+DisableFog();
+
+// Clamp fog brightness to max 0.95 to prevent oversaturation
+ClampFogBrightness(0.95);
+
+// ========================================
+// TEXTURE COMMANDS (recommended Point: BeforeTexture)
+// ========================================
+// - Operate on sampled texture color immediately after sampling and before combining with vertex color.
+// - Use these to adjust texture appearance (color/sharpness/blur).
+
+// Desaturate texture by 25% (convert to grayscale, factor 0=grayscale, 1=full color)
+DesaturateTexture(0.25);
+
+// Reduce texture brightness by 10%
+ReduceTextureBrightness(0.90);
+
+// Sharpen texture edges by 40% (increase local contrast)
+SharpenTexture(0.40);
+
+// Blur texture by 15% (smooth/soften detail)
+BlurTexture(0.15);
+
+// ========================================
+// COLOR / POST-PROCESS COMMANDS (recommended Point: BeforeFinalColor)
+// ========================================
+// - Final color adjustments applied just before fragment output.
+// - Use these for global color grading (saturation/contrast/gamma/tint).
+
+// Increase color saturation by 10% (factor 1.0=normal, <1.0=desaturated, >1.0=more vibrant)
+Saturation(1.10);
+
+// Increase contrast by 5% (factor 1.0=normal, >1.0=more contrast, <1.0=less contrast)
+Contrast(1.05);
+
+// Apply gamma correction of 0.95 (factor 1.0=normal, <1.0=brighter, >1.0=darker)
+Gamma(0.95);
+
+// Apply warm tint: reduce green by 6%, reduce blue by 0%, increase red by 0%
+// Format: Tint(red_factor, green_factor, blue_factor) - 1.0 = no change per channel
+Tint(0.96, 0.94, 1.00);
+
+// ========================================
+// FRAMEBUFFER / HDR COMMANDS (recommended Point: BeforeFinalColor or BeforeBlend)
+// ========================================
+// - Controls HDR range and final brightness output.
+// - Use these to reduce overbright areas or limit overall brightness.
+
+// Clamp HDR values to max 0.92 (prevents extreme brightness overflow)
+ClampHDR(0.92);
+
+// Reduce framebuffer glow/bloom by 30%
+ReduceFramebufferGlow(0.70);
+
+// Limit final brightness by multiplying by 0.88 (reduces peak brightness across entire frame)
+LimitFinalBrightness(0.88);

@@ -751,6 +751,8 @@ add_library(Common STATIC
 	Common/GPU/thin3d_create.h
 	Common/GPU/Shader.cpp
 	Common/GPU/Shader.h
+	Common/GPU/ShaderHooks.cpp
+	Common/GPU/ShaderHooks.h
 	Common/GPU/ShaderWriter.cpp
 	Common/GPU/ShaderWriter.h
 	Common/GPU/ShaderTranslation.h

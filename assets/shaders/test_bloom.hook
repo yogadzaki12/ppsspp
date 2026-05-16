@@ -1,0 +1,10 @@
+// ==Hook==
+Name = Test ReduceBloom
+Author = User
+GameID = *
+Stage = Fragment
+Point = AfterLighting
+Enabled = true
+
+// ==Code==
+ReduceBloom(0.20);

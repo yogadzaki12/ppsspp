@@ -40,6 +40,7 @@
 #include "Common/File/DirListing.h"
 #include "Common/File/AndroidContentURI.h"
 #include "Common/Log/LogManager.h"
+#include "Common/GPU/ShaderHooks.h"
 #include "Common/TimeUtil.h"
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/GraphicsContext.h"
@@ -600,6 +601,42 @@ static void InitGPU(std::string *error_string) {
 	}
 }
 
+static void LoadShaderHooksOnStartup() {
+	ppsspp::shaderhooks::ShaderHookExecutor executor;
+	
+	// Get the user-configured PSP directory and scan {PSP}/shaders/ for .hook files
+	const Path pspPath = GetSysDirectory(DIRECTORY_PSP);
+	const auto results = ppsspp::shaderhooks::LoadShaderHooksFromDisk(std::filesystem::path(pspPath.ToString()), false);
+
+	INFO_LOG(Log::Loader, "===== Shader Hook System =====");
+	INFO_LOG(Log::Loader, "Scanning for .hook files in: %s/shaders/", pspPath.ToString().c_str());
+	if (results.empty()) {
+		INFO_LOG(Log::Loader, "No shader hook files found.");
+		INFO_LOG(Log::Loader, "=============================");
+		return;
+	}
+
+	int successCount = 0;
+	int failCount = 0;
+	for (const auto &result : results) {
+		if (!result.success) {
+			WARN_LOG(Log::Loader, "PARSE FAILED [%s]: %s", result.hook.sourcePath.filename().string().c_str(), result.error.c_str());
+			failCount++;
+			continue;
+		}
+		successCount++;
+		std::ostringstream output;
+		executor.Execute(result.hook, output);
+		INFO_LOG(Log::Loader, "LOADED [%s]: %s (GameID: %s, Point: %s)",
+			result.hook.sourcePath.filename().string().c_str(),
+			result.hook.context.hookName.c_str(),
+			result.hook.context.gameId.c_str(),
+			ppsspp::shaderhooks::ToString(result.hook.context.point));
+	}
+	INFO_LOG(Log::Loader, "Total: %d loaded, %d failed", successCount, failCount);
+	INFO_LOG(Log::Loader, "=============================");
+}
+
 bool PSP_InitStart(const CoreParameter &coreParam) {
 	if (g_bootState != BootState::Off) {
 		ERROR_LOG(Log::Loader, "Can't start loader thread - already on.");
@@ -672,6 +709,7 @@ bool PSP_InitStart(const CoreParameter &coreParam) {
 
 		// Initialize the GPU as far as we can here (do things like load cache files).
 		_dbg_assert_(!gpu);
+		LoadShaderHooksOnStartup();
 #ifndef __LIBRETRO__
 		InitGPU(errorString);
 #endif

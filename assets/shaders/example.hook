@@ -1,0 +1,13 @@
+// ==Hook==
+Name = Example
+Author = Name
+GameID = *
+Stage = Fragment
+Point = BeforeFinalColor
+Enabled = true
+
+// ==Code==
+Saturation(1.35);
+Contrast(1.15);
+Tint(1.10, 0.94, 0.92);
+Gamma(0.90);

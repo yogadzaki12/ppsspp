@@ -20,11 +20,13 @@
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
+#include "Common/GPU/ShaderHooks.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/GPU/ShaderWriter.h"
 #include "Common/GPU/thin3d.h"
 #include "Core/Compatibility.h"
 #include "Core/Config.h"
+#include "Core/ELF/ParamSFO.h"
 #include "Core/System.h"
 #include "GPU/Common/GPUStateUtils.h"
 #include "GPU/Common/ShaderId.h"
@@ -772,6 +774,12 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 			WRITE(p, "  vec4 p = v_color0;\n");
 
+		// BeforeLighting hook: before texture sampling, transform vertex color
+		ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), compat.fragColor0, ppsspp::shaderhooks::HookPoint::BeforeLighting);
+
+		// BeforeTexture hook: apply transforms to sampled texture value 't' before texture blending.
+		ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), "t", ppsspp::shaderhooks::HookPoint::BeforeTexture);
+
 			if (texFunc != GE_TEXFUNC_REPLACE) {
 				if (ubershader) {
 					WRITE(p, "  t.a = max(t.a, u_texNoAlphaMul.x);\n");
@@ -811,6 +819,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 				break;
 			}
 
+
+		// AfterLighting hook: texture and lighting combined into 'v'
+		ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), "v", ppsspp::shaderhooks::HookPoint::AfterLighting);
 			// This happens before fog is applied.
 			*uniformMask |= DIRTY_TEX_ALPHA_MUL;
 
@@ -829,10 +840,19 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "  vec4 v = v_color0%s;\n", secondary);
 		}
 
+
+		// AfterTexture hook: texture application complete, before fog
+		ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), "v", ppsspp::shaderhooks::HookPoint::AfterTexture);
+		// BeforeFog hook: before fog calculations
+		ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), "v", ppsspp::shaderhooks::HookPoint::BeforeFog);
+
 		if (enableFog) {
 			WRITE(p, "  float fogCoef = clamp(v_fogdepth, 0.0, 1.0);\n");
 			WRITE(p, "  v = mix(vec4(u_fogcolor, v.a), v, fogCoef);\n");
 		}
+		// AfterFog hook: fog applied to 'v'
+		ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), "v", ppsspp::shaderhooks::HookPoint::AfterFog);
+
 
 		// Texture access is at half texels [0.5/256, 255.5/256], but colors are normalized [0, 255].
 		// So we have to scale to account for the difference.
@@ -1112,6 +1132,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	// Final color computed - apply logic ops and bitwise color write mask, through shader blending, if specified.
 	if (colorWriteMask || replaceLogicOp) {
+			// BeforeBlend hook: before logic ops and framebuffer blending
+			ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), compat.fragColor0, ppsspp::shaderhooks::HookPoint::BeforeBlend);
+
 		WRITE(p, "  highp uint v32 = packUnorm4x8%s(%s);\n", packSuffix, compat.fragColor0);
 		WRITE(p, "  highp uint d32 = packUnorm4x8%s(destColor);\n", packSuffix);
 
@@ -1147,10 +1170,15 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		WRITE(p, "  %s = unpackUnorm4x8%s(v32);\n", compat.fragColor0, packSuffix);
 	}
 
+	// AfterBlend hook: after framebuffer blending operations
+	ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), compat.fragColor0, ppsspp::shaderhooks::HookPoint::AfterBlend);
 	if (blueToAlpha) {
 		WRITE(p, "  %s = vec4(0.0, 0.0, 0.0, %s.z);  // blue to alpha\n", compat.fragColor0, compat.fragColor0);
 	}
 
+
+	// BeforeFinalColor hook: final output point
+	ppsspp::shaderhooks::WriteFragmentHookTransforms(p, g_paramSFO.GetDiscID(), compat.fragColor0, ppsspp::shaderhooks::HookPoint::BeforeFinalColor);
 	if (gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT)) {
 		DepthScaleFactors depthScale = GetDepthScaleFactors(gstate_c.UseFlags());
 
