@@ -699,12 +699,23 @@ static void LoadShaderHooksOnStartup() {
 			<< ", Point: " << ppsspp::shaderhooks::ToString(result.hook.context.point)
 			<< ", Enabled: " << (result.hook.context.enabled ? "true" : "false") << ")\n";
 		
-		// List commands in the hook
+		// List commands in the hook with detailed values
 		if (!result.hook.commands.empty()) {
-			logBuffer << "  Commands:\n";
-			for (const auto &cmd : result.hook.commands) {
+			logBuffer << "  Commands (" << result.hook.commands.size() << "):\n";
+			for (size_t i = 0; i < result.hook.commands.size(); ++i) {
+				const auto &cmd = result.hook.commands[i];
 				if (cmd) {
-					logBuffer << "    - " << cmd->Describe() << "\n";
+					logBuffer << "    [" << (i + 1) << "] " << cmd->Describe() << "\n";
+					logBuffer << "        Type: " << ppsspp::shaderhooks::ToString(cmd->Type()) << "\n";
+					const auto &args = cmd->Arguments();
+					if (!args.empty()) {
+						logBuffer << "        Arguments (count: " << args.size() << "): ";
+						for (size_t j = 0; j < args.size(); ++j) {
+							if (j > 0) logBuffer << ", ";
+							logBuffer << args[j];
+						}
+						logBuffer << "\n";
+					}
 				}
 			}
 		}
