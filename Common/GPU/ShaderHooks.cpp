@@ -1,6 +1,7 @@
 #include "Common/GPU/ShaderHooks.h"
 
 #include "Common/GPU/ShaderWriter.h"
+#include "Common/File/DirListing.h"
 #include "Common/File/FileUtil.h"
 #include "Core/Util/PathUtil.h"
 #include "Common/System/System.h"
@@ -10,6 +11,7 @@
 #include <cctype>
 #include <cerrno>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <set>
@@ -143,17 +145,36 @@ std::string JoinArguments(const std::vector<float> &arguments) {
 	return out.str();
 }
 
-void LoadHooksFromPath(const HookParser &parser, const std::filesystem::path &root, bool recursive,
+void LoadHooksFromPath(const HookParser &parser, const Path &root, bool recursive,
 	std::set<std::string> *seenFiles, std::vector<HookParseResult> *results) {
-	if (root.empty() || !std::filesystem::exists(root))
+	if (root.empty() || !File::IsDirectory(root))
 		return;
 
-	HookFileLoader loader(root);
-	auto loadedResults = loader.LoadAll(parser, recursive);
-	for (auto &result : loadedResults) {
-		std::string normalizedPath = result.hook.sourcePath.lexically_normal().string();
-		if (seenFiles->insert(normalizedPath).second)
-			results->push_back(std::move(result));
+	std::vector<File::FileInfo> entries;
+	if (!File::GetFilesInDir(root, &entries, "hook"))
+		return;
+
+	for (const auto &entry : entries) {
+		if (entry.isDirectory) {
+			if (recursive)
+				LoadHooksFromPath(parser, entry.fullName, true, seenFiles, results);
+			continue;
+		}
+
+		const std::string normalizedPath = entry.fullName.ToString();
+		if (!seenFiles->insert(normalizedPath).second)
+			continue;
+
+		std::string contents;
+		HookParseResult result;
+		if (!File::ReadTextFileToString(entry.fullName, &contents)) {
+			result.success = false;
+			result.error = "Unable to open hook file: " + normalizedPath;
+			result.hook.sourcePath = std::filesystem::path(normalizedPath);
+		} else {
+			result = parser.ParseText(contents, std::filesystem::path(normalizedPath));
+		}
+		results->push_back(std::move(result));
 	}
 }
 
@@ -161,17 +182,20 @@ void LogShaderHookExecution(const std::string &hookName, const std::string &game
 	const char *colorVar, HookPoint point, const std::vector<std::unique_ptr<ShaderHookCommand>> &commands) {
 	try {
 		const Path logFile = GetSysDirectory(DIRECTORY_SYSTEM) / "shader_hooks.log";
-		std::ofstream logStream(logFile.c_str(), std::ios::app);
-		if (logStream.is_open()) {
-			logStream << "\n[SHADER EXECUTION] Hook: " << hookName << " (GameID: " << gameId 
+		FILE *logStream = File::OpenCFile(logFile, "a");
+		if (logStream) {
+			std::ostringstream logEntry;
+			logEntry << "\n[SHADER EXECUTION] Hook: " << hookName << " (GameID: " << gameId 
 				<< ", Point: " << ToString(point) << ", ColorVar: " << colorVar << ")\n";
-			logStream << "  Executing " << commands.size() << " command(s) in Fragment Shader:\n";
+			logEntry << "  Executing " << commands.size() << " command(s) in Fragment Shader:\n";
 			for (size_t i = 0; i < commands.size(); ++i) {
 				if (commands[i]) {
-					logStream << "    [" << (i + 1) << "] " << commands[i]->Describe() << "\n";
+					logEntry << "    [" << (i + 1) << "] " << commands[i]->Describe() << "\n";
 				}
 			}
-			logStream.flush();
+			const std::string text = logEntry.str();
+			fwrite(text.data(), 1, text.size(), logStream);
+			fclose(logStream);
 		}
 	} catch (...) {
 		// Silently ignore logging errors to avoid disrupting shader generation
@@ -455,14 +479,13 @@ const char *ToString(CommandType type) {
 }
 
 HookParseResult HookParser::ParseFile(const std::filesystem::path &path) const {
-	std::ifstream file(path, std::ios::in | std::ios::binary);
-	if (!file) {
+	std::string contents;
+	const Path filePath(path.string());
+	if (!File::ReadTextFileToString(filePath, &contents)) {
 		return {false, "Unable to open hook file: " + path.string(), {}};
 	}
 
-	std::ostringstream contents;
-	contents << file.rdbuf();
-	return ParseText(contents.str(), path);
+	return ParseText(contents, path);
 }
 
 HookParseResult HookParser::ParseText(const std::string &text, const std::filesystem::path &sourcePath) const {
@@ -562,19 +585,24 @@ HookFileLoader::HookFileLoader(std::filesystem::path root) : root_(std::move(roo
 
 std::vector<std::filesystem::path> HookFileLoader::Scan(bool recursive) const {
 	std::vector<std::filesystem::path> files;
-	if (root_.empty() || !std::filesystem::exists(root_))
+	const Path rootPath(root_.string());
+	if (rootPath.empty() || !File::IsDirectory(rootPath))
 		return files;
 
-	if (recursive) {
-		for (const auto &entry : std::filesystem::recursive_directory_iterator(root_)) {
-			if (entry.is_regular_file() && entry.path().extension() == ".hook")
-				files.push_back(entry.path());
+	std::vector<File::FileInfo> entries;
+	if (!File::GetFilesInDir(rootPath, &entries, "hook"))
+		return files;
+
+	for (const auto &entry : entries) {
+		if (entry.isDirectory) {
+			if (recursive) {
+				HookFileLoader loader(entry.fullName.ToString());
+				auto nested = loader.Scan(true);
+				files.insert(files.end(), nested.begin(), nested.end());
+			}
+			continue;
 		}
-	} else {
-		for (const auto &entry : std::filesystem::directory_iterator(root_)) {
-			if (entry.is_regular_file() && entry.path().extension() == ".hook")
-				files.push_back(entry.path());
-		}
+		files.push_back(std::filesystem::path(entry.fullName.ToString()));
 	}
 
 	std::sort(files.begin(), files.end());
@@ -591,8 +619,8 @@ std::vector<HookParseResult> HookFileLoader::LoadAll(const HookParser &parser, b
 std::vector<HookParseResult> HookFileLoader::ScanAndLoadDefaultPaths(const HookParser &parser, bool recursive) {
 	std::vector<HookParseResult> allResults;
 	std::set<std::string> seenFiles;  // Track by normalized path string
-	std::vector<std::filesystem::path> searchPaths = {
-		"shaders",
+	std::vector<Path> searchPaths = {
+		Path("shaders"),
 	};
 
 	for (const auto &searchPath : searchPaths) {
@@ -623,19 +651,20 @@ std::vector<HookParseResult> LoadShaderHooksFromDisk(const std::filesystem::path
 	HookParser parser;
 	std::vector<HookParseResult> results;
 	std::set<std::string> seenFiles;
+	Path root(basePath.string());
 
 	// Try the provided path first.
-	LoadHooksFromPath(parser, basePath, recursive, &seenFiles, &results);
+	LoadHooksFromPath(parser, root, recursive, &seenFiles, &results);
 
 	// If basePath doesn't look like a shaders folder, also try appending
 	// "shaders" and "SHADERS" so both common cases are covered.
 	auto tryAppend = [&](const std::string &sub) {
-		std::filesystem::path p = basePath / sub;
+		Path p = root / sub;
 		LoadHooksFromPath(parser, p, recursive, &seenFiles, &results);
 	};
 
 	// Only append if basePath filename is not already 'shaders' (case-insensitively).
-	std::string fname = basePath.filename().string();
+	std::string fname = root.GetFilename();
 	auto iequals = [](const std::string &a, const std::string &b) {
 		if (a.size() != b.size()) return false;
 		for (size_t i = 0; i < a.size(); ++i)
