@@ -28,6 +28,7 @@
 #endif
 
 #include <mutex>
+#include <filesystem>
 
 #include "ext/lua/lapi.h"
 
@@ -604,12 +605,19 @@ static void InitGPU(std::string *error_string) {
 static void LoadShaderHooksOnStartup() {
 	ppsspp::shaderhooks::ShaderHookExecutor executor;
 	
-	// Get the user-configured PSP directory and scan {PSP}/shaders/ for .hook files
-	const Path pspPath = GetSysDirectory(DIRECTORY_PSP);
-	const auto results = ppsspp::shaderhooks::LoadShaderHooksFromDisk(std::filesystem::path(pspPath.ToString()), false);
+	// Get the user-configured custom shaders directory (follows memStickDirectory config)
+	const Path shaderPath = GetSysDirectory(DIRECTORY_CUSTOM_SHADERS);
+	const auto results = ppsspp::shaderhooks::LoadShaderHooksFromDisk(std::filesystem::path(shaderPath.ToString()), false);
 
 	INFO_LOG(Log::Loader, "===== Shader Hook System =====");
-	INFO_LOG(Log::Loader, "Scanning for .hook files in: %s/shaders/", pspPath.ToString().c_str());
+	INFO_LOG(Log::Loader, "Scanning for .hook files in: %s", shaderPath.ToString().c_str());
+	
+	// Debug: Check if directory exists
+	if (!std::filesystem::exists(shaderPath.ToString())) {
+		INFO_LOG(Log::Loader, "WARNING: Shaders directory does not exist: %s", shaderPath.ToString().c_str());
+		INFO_LOG(Log::Loader, "Create folder to use shader hooks: %s", shaderPath.ToString().c_str());
+	}
+	
 	if (results.empty()) {
 		INFO_LOG(Log::Loader, "No shader hook files found.");
 		INFO_LOG(Log::Loader, "=============================");

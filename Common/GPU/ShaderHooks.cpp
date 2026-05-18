@@ -140,6 +140,20 @@ std::string JoinArguments(const std::vector<float> &arguments) {
 	return out.str();
 }
 
+void LoadHooksFromPath(const HookParser &parser, const std::filesystem::path &root, bool recursive,
+	std::set<std::string> *seenFiles, std::vector<HookParseResult> *results) {
+	if (root.empty() || !std::filesystem::exists(root))
+		return;
+
+	HookFileLoader loader(root);
+	auto loadedResults = loader.LoadAll(parser, recursive);
+	for (auto &result : loadedResults) {
+		std::string normalizedPath = result.hook.sourcePath.lexically_normal().string();
+		if (seenFiles->insert(normalizedPath).second)
+			results->push_back(std::move(result));
+	}
+}
+
 bool ParseHookSectionLine(HookContext &context, const std::string &line, std::string *error) {
 	const auto equals = line.find('=');
 	if (equals == std::string::npos) {
@@ -554,28 +568,17 @@ std::vector<HookParseResult> HookFileLoader::ScanAndLoadDefaultPaths(const HookP
 	std::vector<HookParseResult> allResults;
 	std::set<std::string> seenFiles;  // Track by normalized path string
 	std::vector<std::filesystem::path> searchPaths = {
-		"PSP/Shaders",        // Standard PSP/Shaders directory
-		".",                   // Current working directory
-		"Shaders",             // Alternative shaders directory
+		"shaders",
 	};
 
 	for (const auto &searchPath : searchPaths) {
-		HookFileLoader loaderForPath(searchPath);
-		auto results = loaderForPath.LoadAll(parser, recursive);
-		for (auto &result : results) {
-			std::string normalizedPath = result.hook.sourcePath.lexically_normal().string();
-			if (seenFiles.find(normalizedPath) == seenFiles.end()) {
-				seenFiles.insert(normalizedPath);
-				allResults.push_back(std::move(result));
-			}
-		}
+		LoadHooksFromPath(parser, searchPath, recursive, &seenFiles, &allResults);
 	}
 
 	return allResults;
 }
 
 std::vector<HookParseResult> LoadShaderHooksFromDisk(bool recursive) {
-	HookFileLoader loader;
 	HookParser parser;
 	auto results = HookFileLoader::ScanAndLoadDefaultPaths(parser, recursive);
 	g_loadedHooks.clear();
@@ -588,11 +591,39 @@ std::vector<HookParseResult> LoadShaderHooksFromDisk(bool recursive) {
 }
 
 std::vector<HookParseResult> LoadShaderHooksFromDisk(const std::filesystem::path &basePath, bool recursive) {
-	// Scan from user-configured PSP directory only: {basePath}/shaders/
-	HookFileLoader loader(basePath / "shaders");
+	// The caller may pass either the actual shaders directory or the PSP
+	// memstick root. Try multiple sensible locations:
+	//  - basePath itself
+	//  - basePath/shaders (lowercase)
+	//  - basePath/SHADERS (uppercase) for users who manually named it so
 	HookParser parser;
-	auto results = loader.LoadAll(parser, recursive);
-	
+	std::vector<HookParseResult> results;
+	std::set<std::string> seenFiles;
+
+	// Try the provided path first.
+	LoadHooksFromPath(parser, basePath, recursive, &seenFiles, &results);
+
+	// If basePath doesn't look like a shaders folder, also try appending
+	// "shaders" and "SHADERS" so both common cases are covered.
+	auto tryAppend = [&](const std::string &sub) {
+		std::filesystem::path p = basePath / sub;
+		LoadHooksFromPath(parser, p, recursive, &seenFiles, &results);
+	};
+
+	// Only append if basePath filename is not already 'shaders' (case-insensitively).
+	std::string fname = basePath.filename().string();
+	auto iequals = [](const std::string &a, const std::string &b) {
+		if (a.size() != b.size()) return false;
+		for (size_t i = 0; i < a.size(); ++i)
+			if (std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i]))
+				return false;
+		return true;
+	};
+	if (!iequals(fname, "shaders")) {
+		tryAppend("shaders");
+		tryAppend("SHADERS");
+	}
+
 	g_loadedHooks.clear();
 	for (auto &result : results) {
 		if (result.success)
