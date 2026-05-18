@@ -1,6 +1,8 @@
 #include "Common/GPU/ShaderHooks.h"
 
 #include "Common/GPU/ShaderWriter.h"
+#include "Common/File/FileUtil.h"
+#include "Common/System/System.h"
 
 #include <algorithm>
 #include <array>
@@ -151,6 +153,27 @@ void LoadHooksFromPath(const HookParser &parser, const std::filesystem::path &ro
 		std::string normalizedPath = result.hook.sourcePath.lexically_normal().string();
 		if (seenFiles->insert(normalizedPath).second)
 			results->push_back(std::move(result));
+	}
+}
+
+void LogShaderHookExecution(const std::string &hookName, const std::string &gameId, 
+	const char *colorVar, HookPoint point, const std::vector<std::unique_ptr<ShaderHookCommand>> &commands) {
+	try {
+		const Path logFile = GetSysDirectory(DIRECTORY_SYSTEM) / "shader_hooks.log";
+		std::ofstream logStream(logFile.c_str(), std::ios::app);
+		if (logStream.is_open()) {
+			logStream << "\n[SHADER EXECUTION] Hook: " << hookName << " (GameID: " << gameId 
+				<< ", Point: " << ToString(point) << ", ColorVar: " << colorVar << ")\n";
+			logStream << "  Executing " << commands.size() << " command(s) in Fragment Shader:\n";
+			for (size_t i = 0; i < commands.size(); ++i) {
+				if (commands[i]) {
+					logStream << "    [" << (i + 1) << "] " << commands[i]->Describe() << "\n";
+				}
+			}
+			logStream.flush();
+		}
+	} catch (...) {
+		// Silently ignore logging errors to avoid disrupting shader generation
 	}
 }
 
@@ -663,6 +686,10 @@ void WriteFragmentHookTransforms(ShaderWriter &writer, std::string_view gameId, 
 		}
 
 		writer.F("  // Hook: %s (%s)\n", hook.context.hookName.c_str(), hook.context.gameId.c_str());
+		
+		// Log shader hook execution
+		LogShaderHookExecution(hook.context.hookName, hook.context.gameId, colorVar, point, hook.commands);
+		
 		for (const auto &command : hook.commands) {
 			if (command)
 				WriteCommandTransform(writer, *command, colorVar);
@@ -717,6 +744,10 @@ void WriteVertexHookTransforms(ShaderWriter &writer, std::string_view gameId, co
 		}
 
 		writer.F("  // Hook: %s (%s)\n", hook.context.hookName.c_str(), hook.context.gameId.c_str());
+		
+		// Log shader hook execution (Vertex stage)
+		LogShaderHookExecution(hook.context.hookName, hook.context.gameId, varName, point, hook.commands);
+		
 		for (const auto &command : hook.commands) {
 			if (command)
 				WriteCommandTransform(writer, *command, varName);
