@@ -2,6 +2,7 @@
 
 #include "Common/GPU/ShaderWriter.h"
 #include "Common/File/FileUtil.h"
+#include "Core/Util/PathUtil.h"
 #include "Common/System/System.h"
 
 #include <algorithm>
