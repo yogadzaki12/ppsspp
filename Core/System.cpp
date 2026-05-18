@@ -664,12 +664,10 @@ static void LoadShaderHooksOnStartup() {
 	INFO_LOG(Log::Loader, "===== Shader Hook System =====");
 	INFO_LOG(Log::Loader, "Scanning for .hook files in: %s", shaderPath.ToString().c_str());
 	
-	// Debug: Check if directory exists
-	if (!std::filesystem::exists(shaderPath.ToString())) {
-		logBuffer << "WARNING: Shaders directory does not exist: " << shaderPath.ToString() << "\n";
-		logBuffer << "Create folder to use shader hooks: " << shaderPath.ToString() << "\n";
-		INFO_LOG(Log::Loader, "WARNING: Shaders directory does not exist: %s", shaderPath.ToString().c_str());
-		INFO_LOG(Log::Loader, "Create folder to use shader hooks: %s", shaderPath.ToString().c_str());
+	// Debug: Check if directory exists (use File APIs to support content URIs)
+	if (!File::IsDirectory(shaderPath)) {
+		logBuffer << "WARNING: Shaders directory not accessible: " << shaderPath.ToString() << "\n";
+		INFO_LOG(Log::Loader, "WARNING: Shaders directory not accessible: %s", shaderPath.ToString().c_str());
 	}
 	
 	if (results.empty()) {
@@ -693,8 +691,8 @@ static void LoadShaderHooksOnStartup() {
 		successCount++;
 		std::ostringstream output;
 		executor.Execute(result.hook, output);
-		logBuffer << "LOADED [" << result.hook.sourcePath.filename().string() << "]: " 
-			<< result.hook.context.hookName << " (GameID: " << result.hook.context.gameId 
+		std::string displayName = result.hook.context.hookName.empty() ? result.hook.sourcePath.filename().string() : result.hook.context.hookName;
+		logBuffer << "LOADED [" << displayName << "] (file: " << result.hook.sourcePath.filename().string() << ") (GameID: " << result.hook.context.gameId 
 			<< ", Stage: " << ppsspp::shaderhooks::ToString(result.hook.context.stage)
 			<< ", Point: " << ppsspp::shaderhooks::ToString(result.hook.context.point)
 			<< ", Enabled: " << (result.hook.context.enabled ? "true" : "false") << ")\n";
@@ -720,9 +718,9 @@ static void LoadShaderHooksOnStartup() {
 			}
 		}
 		
-		INFO_LOG(Log::Loader, "LOADED [%s]: %s (GameID: %s, Stage: %s, Point: %s, Enabled: %s)",
+		INFO_LOG(Log::Loader, "LOADED [%s] (file: %s): (GameID: %s, Stage: %s, Point: %s, Enabled: %s)",
+			displayName.c_str(),
 			result.hook.sourcePath.filename().string().c_str(),
-			result.hook.context.hookName.c_str(),
 			result.hook.context.gameId.c_str(),
 			ppsspp::shaderhooks::ToString(result.hook.context.stage),
 			ppsspp::shaderhooks::ToString(result.hook.context.point),
