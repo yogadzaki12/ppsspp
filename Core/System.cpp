@@ -653,18 +653,31 @@ static void LoadShaderHooksOnStartup() {
 	const Path shaderPath = GetSysDirectory(DIRECTORY_CUSTOM_SHADERS);
 	const auto results = ppsspp::shaderhooks::LoadShaderHooksFromDisk(std::filesystem::path(shaderPath.ToString()), false);
 
+	// Prepare log file in DIRECTORY_SYSTEM
+	std::ostringstream logBuffer;
+	const Path logFile = GetSysDirectory(DIRECTORY_SYSTEM) / "shader_hooks.log";
+	File::CreateFullPath(logFile.NavigateUp());
+
+	logBuffer << "===== Shader Hook System =====\n";
+	logBuffer << "Scanning for .hook files in: " << shaderPath.ToString() << "\n";
+	
 	INFO_LOG(Log::Loader, "===== Shader Hook System =====");
 	INFO_LOG(Log::Loader, "Scanning for .hook files in: %s", shaderPath.ToString().c_str());
 	
 	// Debug: Check if directory exists
 	if (!std::filesystem::exists(shaderPath.ToString())) {
+		logBuffer << "WARNING: Shaders directory does not exist: " << shaderPath.ToString() << "\n";
+		logBuffer << "Create folder to use shader hooks: " << shaderPath.ToString() << "\n";
 		INFO_LOG(Log::Loader, "WARNING: Shaders directory does not exist: %s", shaderPath.ToString().c_str());
 		INFO_LOG(Log::Loader, "Create folder to use shader hooks: %s", shaderPath.ToString().c_str());
 	}
 	
 	if (results.empty()) {
+		logBuffer << "No shader hook files found.\n";
+		logBuffer << "=============================\n";
 		INFO_LOG(Log::Loader, "No shader hook files found.");
 		INFO_LOG(Log::Loader, "=============================");
+		File::WriteStringToFile(true, logBuffer.str(), logFile);
 		return;
 	}
 
@@ -672,6 +685,7 @@ static void LoadShaderHooksOnStartup() {
 	int failCount = 0;
 	for (const auto &result : results) {
 		if (!result.success) {
+			logBuffer << "PARSE FAILED [" << result.hook.sourcePath.filename().string() << "]: " << result.error << "\n";
 			WARN_LOG(Log::Loader, "PARSE FAILED [%s]: %s", result.hook.sourcePath.filename().string().c_str(), result.error.c_str());
 			failCount++;
 			continue;
@@ -679,14 +693,40 @@ static void LoadShaderHooksOnStartup() {
 		successCount++;
 		std::ostringstream output;
 		executor.Execute(result.hook, output);
-		INFO_LOG(Log::Loader, "LOADED [%s]: %s (GameID: %s, Point: %s)",
+		logBuffer << "LOADED [" << result.hook.sourcePath.filename().string() << "]: " 
+			<< result.hook.context.hookName << " (GameID: " << result.hook.context.gameId 
+			<< ", Stage: " << ppsspp::shaderhooks::ToString(result.hook.context.stage)
+			<< ", Point: " << ppsspp::shaderhooks::ToString(result.hook.context.point)
+			<< ", Enabled: " << (result.hook.context.enabled ? "true" : "false") << ")\n";
+		
+		// List commands in the hook
+		if (!result.hook.commands.empty()) {
+			logBuffer << "  Commands:\n";
+			for (const auto &cmd : result.hook.commands) {
+				if (cmd) {
+					logBuffer << "    - " << cmd->Describe() << "\n";
+				}
+			}
+		}
+		
+		INFO_LOG(Log::Loader, "LOADED [%s]: %s (GameID: %s, Stage: %s, Point: %s, Enabled: %s)",
 			result.hook.sourcePath.filename().string().c_str(),
 			result.hook.context.hookName.c_str(),
 			result.hook.context.gameId.c_str(),
-			ppsspp::shaderhooks::ToString(result.hook.context.point));
+			ppsspp::shaderhooks::ToString(result.hook.context.stage),
+			ppsspp::shaderhooks::ToString(result.hook.context.point),
+			result.hook.context.enabled ? "true" : "false");
 	}
+	logBuffer << "Total: " << successCount << " loaded, " << failCount << " failed\n";
+	logBuffer << "Log file saved to: " << logFile.ToString() << "\n";
+	logBuffer << "=============================\n";
+	
 	INFO_LOG(Log::Loader, "Total: %d loaded, %d failed", successCount, failCount);
+	INFO_LOG(Log::Loader, "Log file saved to: %s", logFile.ToString().c_str());
 	INFO_LOG(Log::Loader, "=============================");
+	
+	// Write complete log to file
+	File::WriteStringToFile(true, logBuffer.str(), logFile);
 }
 
 bool PSP_InitStart(const CoreParameter &coreParam) {
