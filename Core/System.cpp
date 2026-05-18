@@ -39,6 +39,7 @@
 #include "Common/File/Path.h"
 #include "Common/File/FileUtil.h"
 #include "Common/File/DirListing.h"
+#include "Common/File/VFS/VFS.h"
 #include "Common/File/AndroidContentURI.h"
 #include "Common/Log/LogManager.h"
 #include "Common/GPU/ShaderHooks.h"
@@ -602,8 +603,51 @@ static void InitGPU(std::string *error_string) {
 	}
 }
 
+static bool InstallDefaultShaderHookExamples() {
+	if (g_Config.internalDataDirectory.empty())
+		return false;
+
+	const Path installMarker = g_Config.internalDataDirectory / "shader_hook_examples_installed.flag";
+	if (File::Exists(installMarker))
+		return false;
+
+	const Path shaderDir = GetSysDirectory(DIRECTORY_CUSTOM_SHADERS);
+	File::CreateFullPath(shaderDir);
+
+	const struct {
+		const char *source;
+		const char *filename;
+	} exampleFiles[] = {
+		{"shaders/all_commands.hook", "all_commands.hook"},
+		{"shaders/example.hook", "example.hook"},
+	};
+
+	bool copiedAny = false;
+	for (const auto &example : exampleFiles) {
+		const Path destination = shaderDir / example.filename;
+		if (File::Exists(destination))
+			continue;
+
+		size_t size = 0;
+		std::unique_ptr<uint8_t[]> data(g_VFS.ReadFile(example.source, &size));
+		if (!data || size == 0)
+			continue;
+
+		if (File::WriteDataToFile(false, data.get(), size, destination)) {
+			copiedAny = true;
+		}
+	}
+
+	if (copiedAny || File::Exists(shaderDir / "all_commands.hook") || File::Exists(shaderDir / "example.hook")) {
+		File::WriteStringToFile(true, "installed=1\n", installMarker);
+	}
+
+	return copiedAny;
+}
+
 static void LoadShaderHooksOnStartup() {
 	ppsspp::shaderhooks::ShaderHookExecutor executor;
+	InstallDefaultShaderHookExamples();
 	
 	// Get the user-configured custom shaders directory (follows memStickDirectory config)
 	const Path shaderPath = GetSysDirectory(DIRECTORY_CUSTOM_SHADERS);
