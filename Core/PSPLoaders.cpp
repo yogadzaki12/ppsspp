@@ -42,6 +42,7 @@
 #include "Core/MemMap.h"
 #include "Core/HDRemaster.h"
 #include "Core/Util/PathUtil.h"
+#include "Common/GPU/ShaderHooks.h"
 
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
@@ -248,6 +249,8 @@ static const char * const altBootNames[] = {
 };
 
 bool Load_PSP_ISO(FileLoader *fileLoader, std::string *error_string) {
+	// Reload shader hooks for this launch (scan custom shaders directory).
+	ppsspp::shaderhooks::LoadShaderHooksFromDisk(std::filesystem::path(GetSysDirectory(DIRECTORY_CUSTOM_SHADERS).ToString()), false);
 	std::string bootpath("disc0:/PSP_GAME/SYSDIR/EBOOT.BIN");
 
 	// Bypass Chinese translation patches, see comment above.
@@ -341,6 +344,8 @@ static Path NormalizePath(const Path &path) {
 
 bool Load_PSP_ELF_PBP(FileLoader *fileLoader, std::string_view discId, std::string *error_string) {
 	// This is really just for headless, might need tweaking later.
+	// Reload shader hooks for this launch (scan custom shaders directory).
+	ppsspp::shaderhooks::LoadShaderHooksFromDisk(std::filesystem::path(GetSysDirectory(DIRECTORY_CUSTOM_SHADERS).ToString()), false);
 	if (PSP_CoreParameter().mountIsoLoader != nullptr) {
 		std::shared_ptr<BlockDevice> bd(ConstructBlockDevice(PSP_CoreParameter().mountIsoLoader, error_string));
 		if (bd) {
@@ -449,6 +454,9 @@ bool Load_PSP_ELF_PBP(FileLoader *fileLoader, std::string_view discId, std::stri
 bool Load_PSP_GE_Dump(FileLoader *fileLoader, std::string *error_string) {
 	auto umd = std::make_shared<BlobFileSystem>(&pspFileSystem, fileLoader, "data.ppdmp");
 	pspFileSystem.Mount("disc0:", umd);
+
+	// Reload shader hooks when loading GE dumps.
+	ppsspp::shaderhooks::LoadShaderHooksFromDisk(std::filesystem::path(GetSysDirectory(DIRECTORY_CUSTOM_SHADERS).ToString()), false);
 
 	return __KernelLoadGEDump("disc0:/data.ppdmp", &PSP_CoreParameter().errorString);
 }
