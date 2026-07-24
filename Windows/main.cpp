@@ -22,7 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
-
+#include <optional>
 #include <mmsystem.h>
 #include <shellapi.h>
 #include <Wbemidl.h>
@@ -50,11 +50,13 @@
 
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
+#include "Core/CmdLine.h"
 #include "Core/SaveState.h"
 #include "Core/Instance.h"
 #include "Core/HLE/Plugins.h"
 #include "Core/RetroAchievements.h"
-#include "Windows/EmuThread.h"
+#include "Core/EmuThread.h"
+#include "Core/Reporting.h"
 #include "Windows/WindowsAudio.h"
 #include "ext/disarm.h"
 
@@ -74,7 +76,11 @@
 #include "Windows/Debugger/Debugger_VFPUDlg.h"
 #if PPSSPP_API(ANY_GL)
 #include "Windows/GEDebugger/GEDebugger.h"
+#include "Windows/GPU/WindowsGLContext.h"
 #endif
+#include "Windows/GPU/WindowsVulkanContext.h"
+#include "Windows/GPU/D3D11Context.h"
+
 #include "Windows/W32Util/ContextMenu.h"
 #include "Windows/W32Util/DialogManager.h"
 #include "Windows/W32Util/DarkMode.h"
@@ -104,6 +110,7 @@ extern "C" {
 extern "C" {
 	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
+
 #if PPSSPP_API(ANY_GL)
 CGEDebugger* geDebuggerWindow = nullptr;
 #endif
@@ -112,19 +119,19 @@ CDisasm *disasmWindow = nullptr;
 CMemoryDlg *memoryWindow = nullptr;
 CVFPUDlg *vfpudlg = nullptr;
 
-static std::string langRegion;
-static std::string osName;
-static std::string osVersion;
-static std::string gpuDriverVersion;
-static std::string computerName;
+static std::string g_langRegion;
+static std::string g_osName;
+static std::string g_osVersionString;
+static std::string g_gpuDriverVersion;
+static std::string g_computerName;
 
-static std::string restartArgs;
+static std::string g_restartArgs;
 
 int g_activeWindow = 0;
 int g_lastNumInstances = 0;
 
-float mouseDeltaX_ = 0;
-float mouseDeltaY_ = 0;
+float g_mouseDeltaX = 0;
+float g_mouseDeltaY = 0;
 
 static double g_lastActivity = 0.0;
 static double g_lastKeepAwake = 0.0;
@@ -161,26 +168,27 @@ void System_Vibrate(int length_ms) {
 }
 
 static void AddDebugRestartArgs() {
-	if (g_logManager.GetConsoleListener()->IsOpen())
-		restartArgs += " -l";
+	if (g_logManager.GetConsoleListener()->IsOpen()) {
+		g_restartArgs += " -l";
+	}
 }
 
 static void PollControllers() {
 	// Disabled by default, needs a workaround to map to psp keys.
 	if (g_Config.bMouseControl) {
-		NativeMouseDelta(mouseDeltaX_, mouseDeltaY_);
+		NativeMouseDelta(g_mouseDeltaX, g_mouseDeltaY);
 	}
 
-	mouseDeltaX_ *= g_Config.fMouseSmoothing;
-	mouseDeltaY_ *= g_Config.fMouseSmoothing;
+	g_mouseDeltaX *= g_Config.fMouseSmoothing;
+	g_mouseDeltaY *= g_Config.fMouseSmoothing;
 
-	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_MOUSE_REL_X] = mouseDeltaX_;
-	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_MOUSE_REL_Y] = mouseDeltaY_;
+	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_MOUSE_REL_X] = g_mouseDeltaX;
+	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_MOUSE_REL_Y] = g_mouseDeltaY;
 }
 
 // Adapted mostly as-is from http://www.gamedev.net/topic/495075-how-to-retrieve-info-about-videocard/?view=findpost&p=4229170
 // so credit goes to that post's author, and in turn, the author of the site mentioned in that post (which seems to be down?).
-std::string GetVideoCardDriverVersion() {
+static std::string GetVideoCardDriverVersion() {
 	std::string retvalue = "";
 
 	HRESULT hr;
@@ -240,11 +248,11 @@ std::string System_GetProperty(SystemProperty prop) {
 	static bool hasCheckedGPUDriverVersion = false;
 	switch (prop) {
 	case SYSPROP_NAME:
-		return osName;
+		return g_osName;
 	case SYSPROP_SYSTEMBUILD:
-		return osVersion;
+		return g_osVersionString;
 	case SYSPROP_LANGREGION:
-		return langRegion;
+		return g_langRegion;
 	case SYSPROP_CLIPBOARD_TEXT:
 		{
 			std::string retval;
@@ -263,24 +271,24 @@ std::string System_GetProperty(SystemProperty prop) {
 	case SYSPROP_GPUDRIVER_VERSION:
 		if (!hasCheckedGPUDriverVersion) {
 			hasCheckedGPUDriverVersion = true;
-			gpuDriverVersion = GetVideoCardDriverVersion();
+			g_gpuDriverVersion = GetVideoCardDriverVersion();
 		}
-		return gpuDriverVersion;
+		return g_gpuDriverVersion;
 	case SYSPROP_BUILD_VERSION:
 		return PPSSPP_GIT_VERSION;
 	case SYSPROP_USER_DOCUMENTS_DIR:
 		return Path(W32Util::UserDocumentsPath()).ToString();  // this'll reverse the slashes.
 	case SYSPROP_COMPUTER_NAME:
-		if (computerName.empty()) {
+		if (g_computerName.empty()) {
 			wchar_t nameBuf[MAX_COMPUTERNAME_LENGTH + 1];
 			DWORD size = ARRAY_SIZE(nameBuf);
 			if (GetComputerNameW(nameBuf, &size)) {
-				computerName = ConvertWStringToUTF8(std::wstring(nameBuf, size));
+				g_computerName = ConvertWStringToUTF8(std::wstring(nameBuf, size));
 			} else {
-				computerName = "(N/A)";
+				g_computerName = "(N/A)";
 			}
 		}
-		return computerName;
+		return g_computerName;
 	default:
 		return "";
 	}
@@ -654,15 +662,12 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	case SystemRequestType::RESTART_APP:
 	{
-		restartArgs = param1;
-		if (!restartArgs.empty())
+		g_restartArgs = param1;
+		if (!g_restartArgs.empty()) {
 			AddDebugRestartArgs();
-		if (false) {  // This doesn't really work anymore: System_GetPropertyBool(SYSPROP_DEBUGGER_PRESENT)) {
-			PostMessage(MainWindow::GetHWND(), MainWindow::WM_USER_RESTART_EMUTHREAD, 0, 0);
-		} else {
-			g_Config.bRestartRequired = true;
-			PostMessage(MainWindow::GetHWND(), MainWindow::WM_USER_DESTROY, 0, 0);
 		}
+		g_Config.bRestartRequired = true;
+		PostMessage(MainWindow::GetHWND(), MainWindow::WM_USER_DESTROY, 0, 0);
 		return true;
 	}
 	case SystemRequestType::COPY_TO_CLIPBOARD:
@@ -885,6 +890,9 @@ static std::string GetDefaultLangRegion() {
 	}
 }
 
+bool System_SendDebugOutput(std::string_view data) { return false; }
+void System_SendDebugScreenshot(const uint8_t *data, int width, int height) {}
+
 static const int EXIT_CODE_VULKAN_WORKS = 42;
 
 #ifndef _DEBUG
@@ -908,10 +916,10 @@ static bool DetectVulkanInExternalProcess() {
 std::vector<std::wstring> GetWideCmdLine() {
 	wchar_t **wargv;
 	int wargc = -1;
-	if (!restartArgs.empty()) {
-		std::wstring wargs = ConvertUTF8ToWString("PPSSPP " + restartArgs);
+	if (!g_restartArgs.empty()) {
+		std::wstring wargs = ConvertUTF8ToWString("PPSSPP " + g_restartArgs);
 		wargv = CommandLineToArgvW(wargs.c_str(), &wargc);
-		restartArgs.clear();
+		g_restartArgs.clear();
 	} else {
 		wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
 	}
@@ -1016,13 +1024,114 @@ static void WinMainCleanup() {
 		if (g_Config.bUpdatedInstanceCounter) {
 			ShutdownInstanceCounter();
 		}
-		W32Util::ExitAndRestart(!restartArgs.empty(), restartArgs);
+		W32Util::ExitAndRestart(!g_restartArgs.empty(), g_restartArgs);
 	}
+}
+
+bool CreateGraphicsBackend(std::string *error_message, GraphicsContext **ctx) {
+	WindowsGraphicsContext *graphicsContext = nullptr;
+	switch (g_Config.iGPUBackend) {
+#if PPSSPP_API(ANY_GL)
+	case (int)GPUBackend::OPENGL:
+		graphicsContext = new WindowsGLContext();
+		break;
+#endif
+	case (int)GPUBackend::DIRECT3D11:
+		graphicsContext = new D3D11Context();
+		break;
+	case (int)GPUBackend::VULKAN:
+		graphicsContext = new WindowsVulkanContext();
+		break;
+	default:
+		return false;
+	}
+
+	if (graphicsContext->Init(MainWindow::GetHInstance(), MainWindow::GetHWND(), error_message)) {
+		*ctx = graphicsContext;
+		return true;
+	} else {
+		delete graphicsContext;
+		*ctx = nullptr;
+		return false;
+	}
+}
+
+// returns null if failed.
+static GraphicsContext *CreateGraphicsContextOrExit() {
+	const bool performingRestart = NativeIsRestarting();
+
+	if (g_Config.sFailedGPUBackends.find("ALL") != std::string::npos) {
+		Reporting::ReportMessage("Graphics init error: %s", "ALL");
+
+		auto err = GetI18NCategory(I18NCat::ERRORS);
+		const char *defaultErrorAll = "PPSSPP failed to startup with any graphics backend. Try upgrading your graphics and other drivers.";
+		std::string_view genericError = err->T("GenericAllStartupError", defaultErrorAll);
+		std::wstring title = ConvertUTF8ToWString(err->T("GenericGraphicsError", "Graphics Error"));
+		MessageBox(0, ConvertUTF8ToWString(genericError).c_str(), title.c_str(), MB_OK);
+
+		// Let's continue (and probably crash) just so they have a way to keep trying.
+	}
+
+	System_Notify(SystemNotification::UI);
+
+	GraphicsContext *graphicsContext = nullptr;
+	std::string error_string;
+	const bool success = CreateGraphicsBackend(&error_string, &graphicsContext);
+	if (success) {
+		return graphicsContext;
+	}
+
+	// Before anything: are we restarting right now?
+	if (performingRestart) {
+		// Okay, switching graphics didn't work out.  Probably a driver bug - fallback to restart.
+		// This happens on NVIDIA when switching OpenGL -> Vulkan.
+		g_Config.Save("switch_graphics_failed");
+		W32Util::ExitAndRestart();
+		return nullptr;
+	}
+
+	auto err = GetI18NCategory(I18NCat::ERRORS);
+	Reporting::ReportMessage("Graphics init error: %s", error_string.c_str());
+
+	const char *defaultErrorVulkan = "Failed initializing graphics. Try upgrading your graphics drivers.\n\nWould you like to try switching to OpenGL?\n\nError message:";
+	const char *defaultErrorOpenGL = "Failed initializing graphics. Try upgrading your graphics drivers.\n\nWould you like to try switching to DirectX 9?\n\nError message:";
+	const char *defaultErrorDirect3D9 = "Failed initializing graphics. Try upgrading your graphics drivers and directx 9 runtime.\n\nWould you like to try switching to OpenGL?\n\nError message:";
+	std::string_view genericError;
+	GPUBackend nextBackend = GPUBackend::VULKAN;
+	switch (g_Config.iGPUBackend) {
+	case (int)GPUBackend::VULKAN:
+		nextBackend = GPUBackend::OPENGL;
+		genericError = err->T("GenericVulkanError", defaultErrorVulkan);
+		break;
+	case (int)GPUBackend::OPENGL:
+	default:
+		nextBackend = GPUBackend::DIRECT3D11;
+		genericError = err->T("GenericOpenGLError", defaultErrorOpenGL);
+		break;
+	}
+	std::string full_error = StringFromFormat("%.*s\n\n%s", (int)genericError.size(), genericError.data(), error_string.c_str());
+	std::wstring title = ConvertUTF8ToWString(err->T("GenericGraphicsError", "Graphics Error"));
+	bool yes = IDYES == MessageBox(0, ConvertUTF8ToWString(full_error).c_str(), title.c_str(), MB_ICONERROR | MB_YESNO);
+	ERROR_LOG(Log::Boot, "%s", full_error.c_str());
+
+	if (yes) {
+		// Change the config to the alternative and restart.
+		g_Config.iGPUBackend = (int)nextBackend;
+		// Clear this to ensure we try their selection.
+		g_Config.sFailedGPUBackends.clear();
+		g_Config.Save("save_graphics_fallback");
+
+		W32Util::ExitAndRestart();
+		return nullptr;
+	}
+
+	// No safe way out without graphics.
+	ExitProcess(1);
+	return nullptr;
 }
 
 int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLine, int iCmdShow) {
 	const std::vector<std::wstring> wideArgs = GetWideCmdLine();
-
 	// Check for the Vulkan workaround before any serious init.
 	for (size_t i = 1; i < wideArgs.size(); ++i) {
 		if (wideArgs[i][0] == L'-') {
@@ -1039,51 +1148,47 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		}
 	}
 
+	// We convert command line arguments to UTF-8.
+	std::vector<std::string> argsUTF8;
+	for (const auto &string : wideArgs) {
+		argsUTF8.push_back(ConvertWStringToUTF8(string));
+	}
+	std::vector<const char *> args;
+	for (const auto &string : argsUTF8) {
+		args.push_back(string.c_str());
+	}
+
+	// args provide argc and argv.
+	CommandLineOptions cmdLineOptions;
+	const CommandLineParseResult parseResult = cmdLineOptions.Parse((int)args.size(), args.data());
+	switch (parseResult) {
+	case CommandLineParseResult::Exit:
+		return 0;
+	case CommandLineParseResult::Error:
+		return 1;
+	default:
+		// Continue with launch.
+		break;
+	}
+
+	if (iCmdShow == SW_MAXIMIZE) {
+		// Consider this to mean --fullscreen. I guess frontends might use it?
+		cmdLineOptions.fullscreen = true;
+	}
+
 	SetCurrentThreadName("Main");
 
 	TimeInit();
 	WinMainInit();
 
-#ifndef _DEBUG
-	bool showLog = false;
-#else
-	bool showLog = true;
-#endif
-
-	const Path &exePath = File::GetExeDirectory();
-	g_VFS.Register("", new DirectoryReader(exePath / "assets"));
-	g_VFS.Register("", new DirectoryReader(exePath));
-
-	langRegion = GetDefaultLangRegion();
-	osName = GetWindowsVersion() + " " + GetWindowsSystemArchitecture();
+	g_langRegion = GetDefaultLangRegion();
+	g_osName = GetWindowsVersion() + " " + GetWindowsSystemArchitecture();
 
 	// OS Build
 	uint32_t outMajor = 0, outMinor = 0, outBuild = 0;
 	if (GetVersionFromKernel32(outMajor, outMinor, outBuild)) {
 		// Builds with (service pack) don't show OS Build for now
-		osVersion = std::to_string(outMajor) + "." + std::to_string(outMinor) + "." + std::to_string(outBuild);
-	}
-
-	std::string configFilename = "";
-	const std::wstring configOption = L"--config=";
-
-	std::string controlsConfigFilename = "";
-	const std::wstring controlsOption = L"--controlconfig=";
-
-	for (size_t i = 1; i < wideArgs.size(); ++i) {
-		if (wideArgs[i][0] == L'\0')
-			continue;
-		if (wideArgs[i][0] == L'-') {
-			if (wideArgs[i].find(configOption) != std::wstring::npos && wideArgs[i].size() > configOption.size()) {
-				const std::wstring tempWide = wideArgs[i].substr(configOption.size());
-				configFilename = ConvertWStringToUTF8(tempWide);
-			}
-
-			if (wideArgs[i].find(controlsOption) != std::wstring::npos && wideArgs[i].size() > controlsOption.size()) {
-				const std::wstring tempWide = wideArgs[i].substr(controlsOption.size());
-				controlsConfigFilename = ConvertWStringToUTF8(tempWide);
-			}
-		}
+		g_osVersionString = std::to_string(outMajor) + "." + std::to_string(outMinor) + "." + std::to_string(outBuild);
 	}
 
 	// This will be overridden by the actual config. But we do want to log during startup.
@@ -1096,73 +1201,6 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	InitMemstickDirectory();
 	CreateSysDirectories();
 
-	// Load config up here, because those changes below would be overwritten
-	// if it's not loaded here first.
-	g_Config.SetSearchPath(GetSysDirectory(DIRECTORY_SYSTEM));
-	g_Config.Load(configFilename.c_str(), controlsConfigFilename.c_str());
-	System_Notify(SystemNotification::CONFIG_LOADED);
-
-	bool debugLogLevel = false;
-
-	const std::wstring gpuBackend = L"--graphics=";
-
-	// The rest is handled in NativeInit().
-	for (size_t i = 1; i < wideArgs.size(); ++i) {
-		if (wideArgs[i][0] == L'\0')
-			continue;
-
-		if (wideArgs[i][0] == L'-') {
-			switch (wideArgs[i][1]) {
-			case L'l':
-				showLog = true;
-				g_Config.bEnableLogging = true;
-				break;
-			case L's':
-				g_Config.bAutoRun = false;
-				g_Config.bSaveSettings = false;
-				break;
-			case L'd':
-				debugLogLevel = true;
-				break;
-			}
-
-			// NOTE: We need to parse --fullscreen early, before we create the window.
-			if (!wcscmp(wideArgs[i].c_str(), L"--fullscreen")) {
-				g_Config.bFullScreen = true;
-				g_Config.DoNotSaveSetting(&g_Config.bFullScreen);
-			} else if (!wcscmp(wideArgs[i].c_str(), L"--windowed")) {
-				g_Config.bFullScreen = false;
-				g_Config.DoNotSaveSetting(&g_Config.bFullScreen);
-			}
-
-			if (wideArgs[i].find(gpuBackend) != std::wstring::npos && wideArgs[i].size() > gpuBackend.size()) {
-				const std::wstring restOfOption = wideArgs[i].substr(gpuBackend.size());
-
-				// Force software rendering off, as picking gles implies HW acceleration.
-				// We could add more options for software such as "software-gles",
-				// "software-vulkan" and "software-d3d11", or something similar.
-				// For now, software rendering force-activates OpenGL.
-				if (restOfOption == L"directx11") {
-					g_Config.iGPUBackend = (int)GPUBackend::DIRECT3D11;
-					g_Config.bSoftwareRendering = false;
-				} else if (restOfOption == L"gles") {
-					g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
-					g_Config.bSoftwareRendering = false;
-				} else if (restOfOption == L"vulkan") {
-					g_Config.iGPUBackend = (int)GPUBackend::VULKAN;
-					g_Config.bSoftwareRendering = false;
-				} else if (restOfOption == L"software") {
-					g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
-					g_Config.bSoftwareRendering = true;
-				}
-			}
-		}
-
-	}
-#ifdef _DEBUG
-	g_Config.bEnableLogging = true;
-#endif
-
 #ifndef _DEBUG
 	// See #11719 - too many Vulkan drivers crash on basic init.
 	if (g_Config.IsBackendEnabled(GPUBackend::VULKAN)) {
@@ -1170,18 +1208,14 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 	}
 #endif
 
-	if (iCmdShow == SW_MAXIMIZE) {
-		// Consider this to mean --fullscreen.
-		g_Config.bFullScreen = true;
-		g_Config.DoNotSaveSetting(&g_Config.bFullScreen);
-	}
+	NativeInit((int)args.size(), args.data(), cmdLineOptions, "", "", nullptr);
 
 	// Consider at least the following cases before changing this code:
 	//   - By default in Release, the console should be hidden by default even if logging is enabled.
 	//   - By default in Debug, the console should be shown by default.
 	//   - The -l switch is expected to show the log console, REGARDLESS of config settings.
 	//   - It should be possible to log to a file without showing the console.
-	g_logManager.GetConsoleListener()->Init(showLog, 150, 120);
+	g_logManager.GetConsoleListener()->Init(cmdLineOptions.showLogWindow, 150, 120);
 
 	// Move the console into position.
 	const HWND console = GetConsoleWindow();
@@ -1189,11 +1223,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		SetWindowPos(console, NULL, g_Config.iConsoleWindowX, g_Config.iConsoleWindowY, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 	}
 
-	if (debugLogLevel) {
-		g_logManager.SetAllLogLevels(LogLevel::LDEBUG);
-	}
-
-	// Media foundation
+	// Windows Media Foundation - used for camera and (currently, but not later) microphone support (we'll move to WASAPI for audio input later)
 	if (!RegisterCMPTMFApis()) {
 		ERROR_LOG(Log::System, "Failed to load Media Foundation functions");
 		// Let's unregister again.
@@ -1215,8 +1245,7 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 #endif
 
 	if (g_Config.bShowDebuggerOnLoad) {
-		MainWindow::CreateDisasmWindow();
-		disasmWindow->Show(g_Config.bShowDebuggerOnLoad, false);
+		PostMessage(hwndMain, MainWindow::WM_USER_SHOW_DISASM, 0, 0);
 	}
 
 	const bool minimized = iCmdShow == SW_MINIMIZE || iCmdShow == SW_SHOWMINIMIZED || iCmdShow == SW_SHOWMINNOACTIVE;
@@ -1224,21 +1253,25 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 		MainWindow::Minimize();
 	}
 
-	// Emu thread (and render thread, if any) is always running!
-	// Only OpenGL uses an externally managed render thread (due to GL's single-threaded context design). Vulkan
-	// manages its own render thread.
+	// Emu thread is always running!
+	// OpenGL uses an externally managed render thread (due to GL's single-threaded context design).
+	// Vulkan manages its own render thread. Our D3D backend doesn't have a render thread.
+	// The Emu thread calls NativeInit() and NativeMain() etc.
 
-	// We convert command line arguments to UTF-8.
-	std::vector<std::string> argsUTF8;
-	for (const auto &string : wideArgs) {
-		argsUTF8.push_back(ConvertWStringToUTF8(string));
-	}
-	std::vector<const char *> args;
-	for (const auto &string : argsUTF8) {
-		args.push_back(string.c_str());
-	}
+	System_SetWindowTitle("");
 
-	MainThread_Start((int)args.size(), args.data());
+	std::thread mainThread = std::thread([]() {
+		std::unique_ptr<GraphicsContext> graphicsContext(CreateGraphicsContextOrExit());
+		if (!graphicsContext) {
+			// We're screwed. Should never get here.
+			_dbg_assert_(false);
+			return;
+		}
+		MainThreadFunc(graphicsContext.get());
+		PostMessage(MainWindow::GetHWND(), MainWindow::WM_USER_UPDATE_UI, 0, 0);
+	});
+
+	// This thread can become the render thread or the emu thread depending on the backend.
 
 	g_InputManager.BeginPolling();
 
@@ -1252,8 +1285,9 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 			MainWindow::UpdateCommands();
 
 			//hack to make it possible to get to main window from floating windows with Esc
-			if (msg.hwnd != hwndMain && msg.wParam == VK_ESCAPE)
+			if (msg.hwnd != hwndMain && msg.wParam == VK_ESCAPE) {
 				BringWindowToTop(hwndMain);
+			}
 		}
 
 		// Translate accelerators and dialog messages...
@@ -1277,12 +1311,22 @@ int WINAPI WinMain(HINSTANCE _hInstance, HINSTANCE hPrevInstance, LPSTR szCmdLin
 
 		if (!wnd || !accel || !TranslateAccelerator(wnd, accel, &msg)) {
 			if (!DialogManager::IsDialogMessage(&msg)) {
-				//and finally translate and dispatch
+				// and finally translate and dispatch
 				TranslateMessage(&msg);
 				DispatchMessage(&msg);
 			}
 		}
 	}
+
+	// This is what breaks the emuthread out of its loop - it checks the UIState.
+	UpdateUIState(UISTATE_EXIT);
+
+	// Already stopped?
+	_dbg_assert_(mainThread.joinable());
+	mainThread.join();
+
+	// It's safe to call NativeShutdown, we've joined the main thread.
+	NativeShutdown();
 
 	g_VFS.Clear();
 

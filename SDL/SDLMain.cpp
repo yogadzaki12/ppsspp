@@ -28,6 +28,7 @@ SDLJoystick *joystick = NULL;
 #include "Common/System/Request.h"
 #include "Common/System/NativeApp.h"
 #include "Common/Audio/AudioBackend.h"
+#include "Core/CmdLine.h"
 #include "ext/glslang/glslang/Public/ShaderLang.h"
 #include "Common/Data/Format/PNGLoad.h"
 #include "Common/Net/Resolve.h"
@@ -837,6 +838,9 @@ void System_Notify(SystemNotification notification) {
 	}
 }
 
+bool System_SendDebugOutput(std::string_view data) { return false; }
+void System_SendDebugScreenshot(const uint8_t *data, int width, int height) {}
+
 // returns -1 on failure
 static int parseInt(const char *str) {
 	int val;
@@ -1382,69 +1386,23 @@ void UpdateSDLCursor() {
 #endif
 }
 
-static int printUsage(const char *progname)
-{
-	// NOTE: by convention, --help outputs to stdout,
-	// not to stderr, since it is intended output in this
-	// case (usage printed under different circumstances,
-	// say in response to error during parsing commandline,
-	// may go to stderr).
-	FILE *dst = stdout;
-
-	// NOTE: wording largely taken from
-	// https://www.ppsspp.org/docs/reference/command-line/
-	fprintf(dst, "PPSSPP - a PSP emulator (SDL build)\n");
-	fprintf(dst, "Usage: %s [options] [FILE]\n\n", progname);
-	fprintf(dst, "Launches FILE (e.g. ISO image) if present.\n");
-	fprintf(dst, "Options (some of these are specific to SDL backend):\n");
-	fprintf(dst, "  -h, --help            show this message and exit\n");
-	fprintf(dst, "  --version             show version information and exit\n");
-
-	fprintf(dst, "  -d                    set the log level to debug\n");
-	fprintf(dst, "  -v                    set the log level to verbose\n");
-	fprintf(dst, "  --loglevel=INTEGER    set the log level to specified value\n");
-	fprintf(dst, "  --log=FILE            output log to FILE\n");
-	fprintf(dst, "  --state=FILE          load state from FILE\n");
-
-	fprintf(dst, "  -i                    use the interpreter\n");
-	fprintf(dst, "  -r                    use IR interpreter\n");
-	fprintf(dst, "  -j                    use JIT\n");
-	fprintf(dst, "  -J                    use IR JIT\n");
-
-	fprintf(dst, "  --fullscreen          force full screen mode, ignoring saved configuration\n");
-	fprintf(dst, "  --windowed            force windowed mode, ignoring saved configuration\n");
-	fprintf(dst, "  --xres PIXELS         set X resolution\n");
-	fprintf(dst, "  --yres PIXELS         set Y resolution\n");
-	fprintf(dst, "  --dpi  FACTOR         set DPI\n");
-	fprintf(dst, "  --scale FACTOR        set scale\n");
-	fprintf(dst, "  --ipad                set resolution to 1024x768\n");
-	fprintf(dst, "  --portrait            portrait mode\n");
-	fprintf(dst, "  --graphics=BACKEND    use a different gpu backend\n");
-	fprintf(dst, "                        options: gles, software, etc. (also opengl3.1, etc.)\n");
-
-	fprintf(dst, "  --pause-menu-exit     change \"Exit to menu\" in pause menu to \"Exit\"\n");
-	fprintf(dst, "  --escape-exit         escape key exits the application\n");
-	fprintf(dst, "  --gamesettings        go directly to settings\n");
-	fprintf(dst, "  --touchscreentest     go directly to the touchscreentest screen\n");
-	fprintf(dst, "  --appendconfig=FILE   merge config FILE into the current configuration\n");
-
-	return 0;
-}
-
 #ifdef _WIN32
 #undef main
 #endif
 int main(int argc, char *argv[]) {
-	for (int i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h"))
-			return printUsage(argv[0]);
-		else if (!strcmp(argv[i], "--version")) {
-			printf("%s\n", PPSSPP_GIT_VERSION);
-			return 0;
-		}
-	}
-
 	TimeInit();
+
+	CommandLineOptions cmdLineOptions;
+	CommandLineParseResult parseResult = cmdLineOptions.Parse(argc, (const char **)argv);
+	switch (parseResult) {
+	case CommandLineParseResult::Exit:
+		return 0;
+	case CommandLineParseResult::Error:
+		return 1;
+	default:
+		// Continue with launch.
+		break;
+	}
 
 	g_logManager.EnableOutput(LogOutput::Stdio);
 
@@ -1486,8 +1444,6 @@ int main(int argc, char *argv[]) {
 	const int linked = SDL_GetVersion();
 	int set_xres = -1;
 	int set_yres = -1;
-	bool portrait = false;
-	bool set_ipad = false;
 	float set_dpi = 0.0f;
 	float set_scale = 1.0f;
 
@@ -1496,20 +1452,9 @@ int main(int argc, char *argv[]) {
 	const char *remain_argv[256] = { argv[0] };
 	constexpr int remain_argv_cap = (int)(sizeof(remain_argv) / sizeof(remain_argv[0]));
 
-	// Option to force a specific OpenGL version (42="4.2",
-	// etc.; -1 means "try them all").
-	// Implemented as a workaround for https://github.com/hrydgard/ppsspp/issues/20687
-	// NOTE: this is currently not persistent (doesn't
-	// go to config), even though --graphics=openglX.Y
-	// also sets the GPU backend which does persist.
-	int force_gl_version = -1;
-
 	Uint32 mode = 0;
 	for (int i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "--fullscreen")) {
-			mode |= SDL_WINDOW_FULLSCREEN;
-			g_Config.DoNotSaveSetting(&g_Config.bFullScreen);
-		} else if (set_xres == -2)
+		if (set_xres == -2)
 			set_xres = parseInt(argv[i]);
 		else if (set_yres == -2)
 			set_yres = parseInt(argv[i]);
@@ -1525,31 +1470,7 @@ int main(int argc, char *argv[]) {
 			set_dpi = -2;
 		else if (!strcmp(argv[i], "--scale"))
 			set_scale = -2;
-		else if (!strcmp(argv[i], "--ipad"))
-			set_ipad = true;
-		else if (!strcmp(argv[i], "--portrait"))
-			portrait = true;
-		else if (!strncmp(argv[i], "--graphics=", strlen("--graphics="))) {
-			const char *restOfOption = argv[i] + strlen("--graphics=");
-			double val=-1.0; // Yes, floating point.
-			if (!strcmp(restOfOption, "vulkan")) {
-				g_Config.iGPUBackend = (int)GPUBackend::VULKAN;
-				g_Config.bSoftwareRendering = false;
-			} else if (!strcmp(restOfOption, "software")) {
-				// Same as on Windows, software presently implies OpenGL.
-				g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
-				g_Config.bSoftwareRendering = true;
-			} else if (!strcmp(restOfOption, "gles") || !strcmp(restOfOption, "opengl")) {
-				// NOTE: OpenGL and GLES are treated the same for
-				// the purposes of option parsing.
-				g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
-				g_Config.bSoftwareRendering = false;
-			} else if (sscanf(restOfOption, "gles%lg", &val) == 1 || sscanf(restOfOption, "opengl%lg", &val) == 1) {
-				g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
-				g_Config.bSoftwareRendering = false;
-				force_gl_version = int(10.0 * val + 0.5);
-			}
-		} else {
+		else {
 			if (remain_argc < remain_argv_cap - 1) {
 				remain_argv[remain_argc++] = argv[i];
 			} else {
@@ -1601,6 +1522,7 @@ int main(int argc, char *argv[]) {
 	g_RefreshRate = displayMode->refresh_rate;
 	SDL_free(displayIDs);
 
+	// TODO: Should only call this if we actually intend to use OpenGL.
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
@@ -1610,19 +1532,19 @@ int main(int argc, char *argv[]) {
 
 	// Force fullscreen if the resolution is too low to run windowed.
 	if (g_DesktopWidth < 480 * 2 && g_DesktopHeight < 272 * 2) {
-		mode |= SDL_WINDOW_FULLSCREEN;
+		cmdLineOptions.fullscreen = true;
 	}
 
 	// If we're on mobile, don't try for windowed either.
 #if defined(MOBILE_DEVICE) && !PPSSPP_PLATFORM(SWITCH)
-	mode |= SDL_WINDOW_FULLSCREEN;
+	cmdLineOptions.fullscreen = true;
 #elif defined(USING_FBDEV) || PPSSPP_PLATFORM(SWITCH)
-	mode |= SDL_WINDOW_FULLSCREEN;
+	cmdLineOptions.fullscreen = true;
 #else
 	mode |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #endif
 
-	if (mode & SDL_WINDOW_FULLSCREEN) {
+	if (cmdLineOptions.fullscreen) {
 		g_display.pixel_xres = g_DesktopWidth;
 		g_display.pixel_yres = g_DesktopHeight;
 		g_Config.bFullScreen = true;
@@ -1630,16 +1552,9 @@ int main(int argc, char *argv[]) {
 		// set a sensible default resolution (2x)
 		g_display.pixel_xres = 480 * 2 * set_scale;
 		g_display.pixel_yres = 272 * 2 * set_scale;
-		if (portrait) {
-			std::swap(g_display.pixel_xres, g_display.pixel_yres);
-		}
 		g_Config.bFullScreen = false;
 	}
 
-	if (set_ipad) {
-		g_display.pixel_xres = 1024;
-		g_display.pixel_yres = 768;
-	}
 	if (!landscape) {
 		std::swap(g_display.pixel_xres, g_display.pixel_yres);
 	}
@@ -1681,7 +1596,10 @@ int main(int argc, char *argv[]) {
 #else
 	const char *external_dir = "/tmp";
 #endif
-	NativeInit(remain_argc, (const char **)remain_argv, path, external_dir, nullptr);
+
+	// After NativeInit, code should no longer look at cmdLineOptions, they should have been translated
+	// into g_Config settings. This is because NativeInit may modify g_Config settings based on the command line options.
+	NativeInit(remain_argc, (const char **)remain_argv, cmdLineOptions, path, external_dir, nullptr);
 
 	// Use the setting from the config when initing the window.
 	if (g_Config.bFullScreen) {
@@ -1717,7 +1635,7 @@ int main(int argc, char *argv[]) {
 	std::string error_message;
 	if (g_Config.iGPUBackend == (int)GPUBackend::OPENGL) {
 		SDLGLGraphicsContext *glctx = new SDLGLGraphicsContext();
-		if (glctx->Init(window, x, y, w, h, mode, &error_message, force_gl_version) != 0) {
+		if (glctx->Init(window, x, y, w, h, mode, &error_message, cmdLineOptions.force_gl_version) != 0) {
 			// Let's try the fallback once per process run.
 			fprintf(stderr, "GL init error '%s' - falling back to Vulkan\n", error_message.c_str());
 			g_Config.iGPUBackend = (int)GPUBackend::VULKAN;
@@ -1747,7 +1665,7 @@ int main(int argc, char *argv[]) {
 
 			// NOTE : This should match the three lines above in the OpenGL case.
 			SDLGLGraphicsContext *glctx = new SDLGLGraphicsContext();
-			if (glctx->Init(window, x, y, w, h, mode, &error_message, force_gl_version) != 0) {
+			if (glctx->Init(window, x, y, w, h, mode, &error_message, cmdLineOptions.force_gl_version) != 0) {
 				fprintf(stderr, "GL fallback failed: %s\n", error_message.c_str());
 				return 1;
 			}
@@ -1923,7 +1841,7 @@ int main(int argc, char *argv[]) {
 
 			if (g_Config.iGPUBackend == (int)GPUBackend::OPENGL) {
 				SDLGLGraphicsContext *ctx  = (SDLGLGraphicsContext *)graphicsContext;
-				if (!ctx->Init(window, x, y, w, h, mode, &error_message, force_gl_version)) {
+				if (!ctx->Init(window, x, y, w, h, mode, &error_message, cmdLineOptions.force_gl_version)) {
 					fprintf(stderr, "Failed to reinit graphics.\n");
 				}
 			}

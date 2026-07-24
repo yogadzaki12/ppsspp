@@ -30,6 +30,7 @@
 #include "Core/System.h"
 #include "Core/Loaders.h"
 #include "Core/Config.h"
+#include "Core/CmdLine.h"
 
 #include "Windows/InputDevice.h"
 #include "Windows/XinputDevice.h"
@@ -414,6 +415,9 @@ std::vector<std::string> System_GetPropertyStringVec(SystemProperty prop) {
 		return result;
 	}
 }
+
+bool System_SendDebugOutput(std::string_view data) { return false; }
+void System_SendDebugScreenshot(const uint8_t *data, int width, int height) {}
 
 extern AudioBackend *g_audioBackend;
 
