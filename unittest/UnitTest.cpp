@@ -127,6 +127,7 @@ void System_AudioClear() {}
 void System_AudioPushSamples(const s32 *audio, int numSamples, float volume) {}
 bool System_SendDebugOutput(std::string_view data) { return false; }
 void System_SendDebugScreenshot(const uint8_t *data, int width, int height) {}
+std::vector<std::string> System_GetCameraDeviceList() { return std::vector<std::string>(); }
 
 // Temporary hacks around annoying linking errors.  Copied from Headless.
 void NativeFrame(GraphicsContext *graphicsContext) {}
@@ -1389,6 +1390,8 @@ bool TestSoftwareGPUJit();
 bool TestIRPassSimplify();
 bool TestThreadManager();
 bool TestVFS();
+bool TestZipSlip();
+bool TestLzrc();
 
 TestItem availableTests[] = {
 #if PPSSPP_ARCH(ARM64) || PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
@@ -1444,6 +1447,8 @@ TestItem availableTests[] = {
 	TEST_ITEM(LinAlg),
 	TEST_ITEM(Lang),
 	TEST_ITEM(CmdLine),
+	TEST_ITEM(ZipSlip),
+	TEST_ITEM(Lzrc),
 };
 
 int main(int argc, const char *argv[]) {

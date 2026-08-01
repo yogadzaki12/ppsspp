@@ -83,7 +83,7 @@
 #include "Common/StringUtils.h"
 #include "Common/Log/LogManager.h"
 #include "Common/MemArena.h"
-#include "Common/GraphicsContext.h"
+#include "Common/GPU/GraphicsContext.h"
 #include "Common/OSVersion.h"
 #include "Common/GPU/ShaderTranslation.h"
 #include "Common/VR/PPSSPPVR.h"
@@ -177,7 +177,6 @@ std::string config_filename;
 // Really need to clean this mess of globals up... but instead I add more :P
 bool g_TakeScreenshot;
 static bool resized = false;
-static bool restarting = false;
 
 static int renderCounter = 0;
 
@@ -192,7 +191,6 @@ static Draw::DrawContext *g_draw;
 static Draw::Pipeline *colorPipeline;
 static Draw::Pipeline *texColorPipeline;
 static UIContext *uiContext;
-static int g_restartGraphics;
 static bool g_windowHidden = false;
 static std::string g_achievementsHostOverride;
 static std::string g_savedAchievementsHost;
@@ -274,12 +272,6 @@ void NativeGetAppInfo(std::string *app_dir_name, std::string *app_nice_name, boo
 	*app_dir_name = "ppsspp";
 	*landscape = true;
 	*version = PPSSPP_GIT_VERSION;
-
-#if PPSSPP_ARCH(ARM) && defined(__ANDROID__)
-	ArmEmitterTest();
-#elif PPSSPP_ARCH(ARM64) && defined(__ANDROID__)
-	Arm64EmitterTest();
-#endif
 }
 
 #if defined(USING_WIN_UI) && !PPSSPP_PLATFORM(UWP)
@@ -586,10 +578,12 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 	// Apply parsed command line options to config.
 	cmdLineOptions.ApplyToConfig();
 
-	const char *fileToLog = nullptr;
-
 	bool gotBootFilename = false;
 	boot_filename.clear();
+
+	if (boot_filename.empty() && cmdLineOptions.bootVSH.has_value() && cmdLineOptions.bootVSH.value()) {
+		boot_filename = g_Config.flash0Directory / "vsh/module/vshmain.prx";
+	}
 
 	// Parse command line
 	LogLevel logLevel = LogLevel::LINFO;
@@ -603,6 +597,7 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 		setLogLevel(cmdLineOptions.logLevel.value());
 	}
 
+	std::string fileToLog;
 	for (int i = 1; i < argc; i++) {
 		if (argv[i][0] == '-') {
 #if defined(__APPLE__)
@@ -679,7 +674,7 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 		}
 	}
 
-	if (fileToLog) {
+	if (!fileToLog.empty()) {
 		// Start logging immediately.
 		g_logManager.EnableOutput(LogOutput::File);
 		g_logManager.SetFileLogPath(Path(fileToLog));
@@ -781,7 +776,6 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 	Achievements::Initialize();
 
 	// Must be done restarting by now.
-	restarting = false;
 	g_nativeMainThreadReady = true;
 }
 
@@ -953,7 +947,7 @@ bool CreateGlobalPipelines() {
 	return true;
 }
 
-void NativeShutdownGraphics() {
+void NativeShutdownGraphics(GraphicsContext *graphicContext) {
 	INFO_LOG(Log::System, "NativeShutdownGraphics begin");
 
 	if (g_screenManager) {
@@ -1018,23 +1012,15 @@ static void SendMouseDeltaAxis();
 void NativeFrame(GraphicsContext *graphicsContext) {
 	PROFILE_END_FRAME();
 
+	if (!(Core_IsActive() || Core_IsStepping()))
+		UpdateUIState(UISTATE_MENU);
+	Core_StateProcessed();
+
 	if (System_GetPropertyInt(SYSPROP_DEVICE_TYPE) == DEVICE_TYPE_DESKTOP) {
 		if (g_windowHidden && g_Config.bPauseWhenMinimized) {
 			sleep_ms(16, "window-hidden");
 			return;
 		}
-	}
-
-	// This can only be accessed from Windows currently, and causes linking errors with headless etc.
-	if (g_restartGraphics == 1) {
-		// Used for debugging only.
-		NativeShutdownGraphics();
-		g_restartGraphics++;
-		return;
-	}
-	else if (g_restartGraphics == 2) {
-		NativeInitGraphics(graphicsContext);
-		g_restartGraphics = 0;
 	}
 
 	double startTime = time_now_d();
@@ -1211,7 +1197,6 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 
 bool HandleGlobalMessage(UIMessage message, const std::string &value) {
 	if (message == UIMessage::RESTART_GRAPHICS) {
-		g_restartGraphics = 1;
 		return true;
 	} else if (message == UIMessage::SAVESTATE_DISPLAY_SLOT) {
 		auto sy = GetI18NCategory(I18NCat::SYSTEM);
@@ -1636,14 +1621,6 @@ void NativeResized() {
 	resized = true;
 }
 
-void NativeSetRestarting() {
-	restarting = true;
-}
-
-bool NativeIsRestarting() {
-	return restarting;
-}
-
 void NativeShutdown() {
 	INFO_LOG(Log::System, "NativeShutdown begin");
 	ClearAchievementsHostOverride();
@@ -1684,10 +1661,7 @@ void NativeShutdown() {
 	ShaderTranslationShutdown();
 
 	// Avoid shutting this down when restarting core.
-	if (!restarting) {
-		g_logManager.Shutdown();
-	}
-
+	g_logManager.Shutdown();
 	g_threadManager.Teardown();
 
 #if !PPSSPP_PLATFORM(IOS)

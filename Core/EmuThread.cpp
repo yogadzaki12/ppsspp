@@ -4,15 +4,15 @@
 #include <atomic>
 #include <thread>
 
-#include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
 #include "Common/System/Request.h"
+#include "Common/System/Application.h"
 #include "Common/Data/Text/I18n.h"
 #include "Common/Input/InputState.h"
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
-#include "Common/GraphicsContext.h"
+#include "Common/GPU/GraphicsContext.h"
 #include "Common/Thread/ThreadUtil.h"
 
 #include "Core/EmuThread.h"
@@ -22,68 +22,132 @@
 #include "Core/ConfigValues.h"
 
 enum class EmuThreadState {
-	DISABLED,
-	START_REQUESTED,
 	RUNNING,
 	QUIT_REQUESTED,
 	STOPPED,
 };
 
-static std::atomic<EmuThreadState> g_emuThreadState(EmuThreadState::DISABLED);
+static std::atomic<EmuThreadState> g_emuThreadState(EmuThreadState::STOPPED);
 static std::atomic<bool> g_inLoop;
 
 class GraphicsContext;
-
-void MainThreadFunc(GraphicsContext *graphicsContext);
 
 bool MainThread_Ready() {
 	return g_inLoop;
 }
 
-static void EmuThreadFunc(GraphicsContext *graphicsContext) {
+static void EmuThreadFunc(GraphicsContext *graphicsContext, Application *application, std::function<void()> postFrame) {
+	INFO_LOG(Log::G3D, "Entering separate emu thread");
 	SetCurrentThreadName("EmuThread");
 
-	// There's no real requirement that NativeInit happen on this thread.
-	// We just call the update/render loop here.
-	g_emuThreadState = EmuThreadState::RUNNING;
+	AndroidJNIThreadContext context;
 
-	NativeInitGraphics(graphicsContext);
+	// This normally calls NativeInitGraphics()
+	if (!application->InitGraphics(graphicsContext)) {
+		_assert_msg_(false, "NativeInitGraphics failed, might as well bail");
+		// If this fails, which it normally shouldn't, let's bail.
+		g_emuThreadState = EmuThreadState::QUIT_REQUESTED;
+	} else {
+		INFO_LOG(Log::G3D, "EmuThread: Entering loop");
+	}
 
 	while (g_emuThreadState != EmuThreadState::QUIT_REQUESTED) {
 		// We're here again, so the game quit.  Restart Run() which controls the UI.
 		// This way they can load a new game.
-		if (!Core_IsActive()) {
-			UpdateUIState(UISTATE_MENU);
+		// This normally calls NativeFrame()
+		application->Frame(graphicsContext);
+		if (postFrame) {
+			postFrame();
 		}
-
-		Core_StateProcessed();
-		NativeFrame(graphicsContext);
-
 		if (GetUIState() == UISTATE_EXIT) {
 			g_emuThreadState = EmuThreadState::QUIT_REQUESTED;
 		}
 	}
 
+	INFO_LOG(Log::System, "emuThreadState was set to QUIT_REQUESTED, left EmuThreadFunc loop. Setting state to STOPPED.");
+
 	g_emuThreadState = EmuThreadState::STOPPED;
 
-	NativeShutdownGraphics();
+	// This normally calls NativeShutdownGraphics()
+	application->ShutdownGraphics(graphicsContext);
+	delete application;
+
+	INFO_LOG(Log::System, "Leaving separate emu thread");
 }
 
-void MainThreadFunc(GraphicsContext *graphicsContext) {
-	const bool useEmuThread = g_Config.iGPUBackend == (int)GPUBackend::OPENGL;
-	if (useEmuThread) {
-		SetCurrentThreadName("RenderThread");
-		// This is now the render thread, and will spawn the emu thread below.
+std::thread EmuThread_Start(GraphicsContext *graphicsContext, Application *application, std::function<void()> postFrame) {
+	_dbg_assert_(g_emuThreadState == EmuThreadState::STOPPED);
+	g_emuThreadState = EmuThreadState::RUNNING;
+	std::thread emuThread = std::thread(&EmuThreadFunc, graphicsContext, application, postFrame);
+	graphicsContext->ThreadStart();
+	return emuThread;
+}
 
-		std::string error_string;
-		bool success = graphicsContext->InitFromRenderThread(&error_string);
+void EmuThread_Join(GraphicsContext *graphicsContext, std::thread &emuThread) {
+	const EmuThreadState state = g_emuThreadState;
+	if (state != EmuThreadState::QUIT_REQUESTED &&
+		state != EmuThreadState::STOPPED) {
+		g_emuThreadState = EmuThreadState::QUIT_REQUESTED;
+	}
+	_dbg_assert_(emuThread.joinable());
+	if (graphicsContext->NeedsSeparateEmuThread()) {
+		graphicsContext->ThreadFrameUntilCondition([] {
+			// Need to keep eating frames to allow the EmuThread to exit correctly.
+			return g_emuThreadState == EmuThreadState::STOPPED;
+		});
+	}
+	graphicsContext->ThreadEnd();
+	emuThread.join();
+	emuThread = std::thread();
+}
+
+bool RunMainLoop(GraphicsContext *graphicsContext, Application *application, std::function<bool()> runCondition, std::function<void()> postFrame) {
+	// This is the main thread. the graphics contexts will spawn and handle its own threads if needed.
+	// InitFromRenderThread/ShutdownFromRenderThread are not used.
+
+	application->InitGraphics(graphicsContext);
+	// NativeResized();
+
+	DEBUG_LOG(Log::Boot, "Done.");
+
+	g_inLoop = true;
+
+	while (runCondition()) {
+		// We're here again, so the game quit.  Restart Run() which controls the UI.
+		// This way they can load a new game.
+		application->Frame(graphicsContext);
+		postFrame();
+	}
+	Core_Stop();
+
+	// Process the shutdown.  Without this, non-GL delays 800ms on shutdown.
+	Core_StateProcessed();
+	application->Frame(graphicsContext);
+
+	g_inLoop = false;
+
+	application->ShutdownGraphics(graphicsContext);
+	delete application;
+	return true;
+}
+
+// Call InitAPI and ShutdownAPI outside this!
+bool MainThreadFunc(GraphicsContext *graphicsContext, Application *application, WindowSystem windowSystem, void *windowData1, void *windowData2, std::function<void()> postFrame) {
+	// This is now the render thread, and will spawn the emu thread below.
+	std::string error_string;
+	bool success = graphicsContext->InitSurface(windowSystem, windowData1, windowData2, &error_string);
+	if (!success) {
+		return false;
+	}
+
+	std::string errorMessage;
+	if (graphicsContext->NeedsSeparateEmuThread()) {
+		SetCurrentThreadName("RenderThread");
 
 		DEBUG_LOG(Log::Boot, "Done.");
 
 		g_inLoop = true;
-
-		g_emuThreadState = EmuThreadState::START_REQUESTED;
-		std::thread emuThread = std::thread(&EmuThreadFunc, graphicsContext);
+		std::thread emuThread = EmuThread_Start(graphicsContext, application, postFrame);
 
 		graphicsContext->ThreadStart();
 		// This thread becomes the render thread.
@@ -99,56 +163,18 @@ void MainThreadFunc(GraphicsContext *graphicsContext) {
 		Core_Stop();
 		g_inLoop = false;
 
-		const EmuThreadState state = g_emuThreadState;
-		if (state != EmuThreadState::QUIT_REQUESTED &&
-			state != EmuThreadState::STOPPED) {
-			g_emuThreadState = EmuThreadState::QUIT_REQUESTED;
-		}
-		graphicsContext->ThreadFrameUntilCondition([] {
-			// Need to keep eating frames to allow the EmuThread to exit correctly.
-			return g_emuThreadState == EmuThreadState::STOPPED;
-		});
-		emuThread.join();
-		INFO_LOG(Log::System, "EmuThreadJoin - joined");
+		EmuThread_Join(graphicsContext, emuThread);
 
 		graphicsContext->ThreadEnd();
+
+		INFO_LOG(Log::System, "RenderThread - joined");
+
 	} else {
-		SetCurrentThreadName("EmuThread");
-		// This is the emu thread. the graphics contexts will spawn and handle its own threads if needed.
+		SetCurrentThreadName("MainThread");
 
-		std::string error_string;
-		bool success = graphicsContext->InitFromRenderThread(&error_string);
-
-		NativeInitGraphics(graphicsContext);
-		NativeResized();
-
-		DEBUG_LOG(Log::Boot, "Done.");
-
-		g_inLoop = true;
-
-		graphicsContext->ThreadStart();
-
-		while (GetUIState() != UISTATE_EXIT) {
-			// We're here again, so the game quit.  Restart Run() which controls the UI.
-			// This way they can load a new game.
-			if (!(Core_IsActive() || Core_IsStepping()))
-				UpdateUIState(UISTATE_MENU);
-			Core_StateProcessed();
-			NativeFrame(graphicsContext);
-		}
-		Core_Stop();
-
-		// Process the shutdown.  Without this, non-GL delays 800ms on shutdown.
-		Core_StateProcessed();
-		NativeFrame(graphicsContext);
-
-		g_inLoop = false;
-
-		NativeShutdownGraphics();
-
-		graphicsContext->ThreadEnd();
-		graphicsContext->ShutdownFromRenderThread();
+		RunMainLoop(graphicsContext, application, []() { return GetUIState() != UISTATE_EXIT; }, postFrame);
 	}
 
-	graphicsContext->Shutdown();
+	graphicsContext->ShutdownSurface();
+	return true;
 }

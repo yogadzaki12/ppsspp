@@ -4,6 +4,8 @@
 #include <string>
 
 #include "Common/Common.h"
+#include "Common/System/Application.h"
+#include "Common/GPU/MiscTypes.h"
 
 // The Native App API.
 //
@@ -58,12 +60,6 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext);
 // and only write dp_xres and dp_yres.
 void NativeResized();
 
-// Set a flag to indicate a restart.  Reset after NativeInit().
-void NativeSetRestarting();
-
-// Retrieve current restarting flag.
-bool NativeIsRestarting();
-
 // Delivers touch/key/axis events "instantly", without waiting for the next frame so that NativeFrame can deliver.
 // Some systems like UI will buffer these events internally but at least in gameplay we can get the minimum possible
 // input latency - assuming your main loop is architected properly (NativeFrame called from a different thread than input event handling).
@@ -91,7 +87,7 @@ void NativeMix(short *audio, int num_samples, int sampleRateHz, void *userdata);
 // The graphics context should still be active when calling this, as freeing
 // of graphics resources happens here.
 // Main thread.
-void NativeShutdownGraphics();
+void NativeShutdownGraphics(GraphicsContext *graphicsContext);
 void NativeShutdown();
 
 void PostLoadConfig();
@@ -112,3 +108,16 @@ bool Native_IsWindowHidden();
 bool Native_UpdateScreenScale(int width, int height, float customScale);
 
 AudioBackend *System_CreateAudioBackend();
+
+class NativeApplication : public Application {
+public:
+	bool InitGraphics(GraphicsContext *graphicsContext) override {
+		return NativeInitGraphics(graphicsContext);
+	}
+	void ShutdownGraphics(GraphicsContext *graphicsContext) override {
+		NativeShutdownGraphics(graphicsContext);
+	}
+	void Frame(GraphicsContext *graphicsContext) override {
+		NativeFrame(graphicsContext);
+	}
+};
