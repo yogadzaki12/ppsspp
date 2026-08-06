@@ -7,7 +7,7 @@ plugins {
 // All the below replaces the following "gladed.androidgitversion" config:
 // configure<com.gladed.androidgitversion.AndroidGitVersionExtension> {
 //   codeFormat = "MNNPPBBBB"
-//   format = "%tag%%-count%%-branch%%-dirty%"
+//   format = "%tag%%-count%%-dirty%"
 //   prefix = "v"  // Only tags beginning with v are considered.
 //   untrackedIsDirty = false
 // }
@@ -25,9 +25,6 @@ val gitTag = providers.git("describe", "--tags", "--match", "v*", "--abbrev=0")
 val commitsSinceTag = providers.git(
 	"rev-list", "$gitTag..HEAD", "--count"
 ).toIntOrNull() ?: 0
-val branchName = providers.git(
-	"rev-parse", "--abbrev-ref", "HEAD"
-).replace("/", "-")
 val isDirty = providers.git("status", "--porcelain")
 	.lineSequence()
 	.any { it.isNotBlank() && !it.startsWith("??") } // untrackedIsDirty = false
@@ -46,8 +43,6 @@ val gitVersionName = if (commitsSinceTag == 0) gitTag else buildString {
 	append(gitTag)
 	append("-")
 	append(commitsSinceTag)
-	append("-")
-	append(branchName)
 	if (isDirty) append("-dirty")
 }
 
