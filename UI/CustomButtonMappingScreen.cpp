@@ -132,12 +132,22 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	auto di = GetI18NCategory(I18NCat::DIALOG);
 
 	TouchControlConfig &touch = g_Config.GetCurrentTouchControlsConfig(deviceOrientation_);
+	static const char *summaryPositionLabels[] = { "Center", "Left", "Down", "Right", "Up" };
+	static const char *summaryMarginLabels[] = { "None", "Small", "Medium", "High" };
 
 	ConfigCustomButton *cfg = nullptr;
 	bool *show = nullptr;
+	bool *summaryShow = nullptr;
+	std::string *summaryText = nullptr;
+	int *summaryPosition = nullptr;
+	int *summaryMargin = nullptr;
 	memset(array, 0, sizeof(array));
 	cfg = &g_Config.CustomButton[id_];
 	show = &touch.touchCustom[id_].show;
+	summaryShow = &g_Config.bCustomButtonSummary[id_];
+	summaryText = &g_Config.sCustomButtonSummaryText[id_];
+	summaryPosition = &g_Config.iCustomButtonSummaryPosition[id_];
+	summaryMargin = &g_Config.iCustomButtonSummaryMargin[id_];
 	for (int i = 0; i < ARRAY_SIZE(g_customKeyList); i++)
 		array[i] = (0x01 == ((g_Config.CustomButton[id_].key >> i) & 0x01));
 
@@ -156,6 +166,7 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	
 	vertLayout->Add(new ItemHeader(co->T("Button style")));
 	vertLayout->Add(new CheckBox(show, co->T("Visible")));
+	vertLayout->Add(new CheckBox(summaryShow, co->T("Summary")));
 
 	Choice *icon = vertLayout->Add(new Choice(co->T("Icon")));
 	icon->SetIconRight(ImageID(customKeyImages[cfg->image].i), 1.0f, customKeyImages[cfg->image].r*PI/180, false, false); // Set right icon on the choice
@@ -175,6 +186,14 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 			shape->SetPopupOrigin(e.v);
 
 		screenManager()->push(shape);
+	});
+
+	vertLayout->Add(new PopupTextInputChoice(GetRequesterToken(), summaryText, co->T("Summary text"), co->T("Summary text"), 48, screenManager()));
+	PopupMultiChoice *summaryPos = vertLayout->Add(new PopupMultiChoice(summaryPosition, co->T("Summary position"), summaryPositionLabels, 0, ARRAY_SIZE(summaryPositionLabels), I18NCat::CONTROLS, screenManager()));
+	summaryPos->SetEnabledPtr(summaryShow);
+	PopupMultiChoice *summaryMarginChoice = vertLayout->Add(new PopupMultiChoice(summaryMargin, co->T("Summary margin"), summaryMarginLabels, 0, ARRAY_SIZE(summaryMarginLabels), I18NCat::CONTROLS, screenManager()));
+	summaryMarginChoice->SetEnabledFunc([summaryShow, summaryPosition]() {
+		return *summaryShow && *summaryPosition != 0;
 	});
 
 	vertLayout->Add(new ItemHeader(co->T("Button Binding")));
