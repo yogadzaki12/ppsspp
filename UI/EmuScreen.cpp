@@ -1113,7 +1113,21 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 		__CtrlSetRapidFire(down, g_Config.iRapidFireInterval);
 		break;
 
+	case VIRTKEY_SWAP_LAYOUT:
+		if (down) {
+			// Only perform minimal operations during emulation:
+			// Toggle layout selection between 1 and 2.
+			// This is safer than swapping struct contents, avoids invalidating references.
+			g_Config.SwapTouchControlsLayouts();
+			System_PostUIMessage(UIMessage::RECREATE_VIEWS);
+		}
+		break;
+
 	default:
+		// To make sure we're not in an async context.
+		if (down) {
+			queuedVirtKeys_.push_back(virtualKeyCode);
+		}
 		break;
 	}
 }
@@ -1262,7 +1276,7 @@ void EmuScreen::CreateViews() {
 
 	const DeviceOrientation deviceOrientation = GetDeviceOrientation();
 
-	TouchControlConfig &touch = g_Config.GetTouchControlsConfig(deviceOrientation);
+	TouchControlConfig &touch = g_Config.GetCurrentTouchControlsConfig(deviceOrientation);
 
 	const Bounds &bounds = GetLayoutBounds(*screenManager()->getUIContext());
 

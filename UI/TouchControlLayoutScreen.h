@@ -40,6 +40,8 @@ protected:
 	ViewLayoutMode LayoutMode() const override { return ViewLayoutMode::ApplyInsets; }
 	void OnReset(UI::EventParams &e);
 	void OnMode(UI::EventParams &e);
+	void OnLayoutSelection(UI::EventParams &e);
+
 
 private:
 	UI::ChoiceStrip *mode_ = nullptr;
