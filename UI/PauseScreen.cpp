@@ -70,6 +70,7 @@
 #include "UI/RetroAchievementScreens.h"
 #include "UI/TouchControlLayoutScreen.h"
 #include "UI/BackgroundAudio.h"
+#include "UI/Background.h"
 #include "UI/MiscViews.h"
 #include "UI/AdhocServerScreen.h"
 
@@ -84,6 +85,53 @@ void ShowMessageAfterSaveStateAction(SaveState::Status status, std::string_view 
 			message, metadata, status == SaveState::Status::SUCCESS ? 2.0 : 5.0);
 	}
 }
+
+class PatchSettingsScreen : public UIBaseScreen {
+public:
+	PatchSettingsScreen(const Path &filename) : UIBaseScreen(), gamePath_(filename) {}
+
+	void CreateViews() override {
+		using namespace UI;
+
+		auto di = GetI18NCategory(I18NCat::DIALOG);
+		auto gr = GetI18NCategory(I18NCat::GRAPHICS);
+
+		root_ = new LinearLayout(ORIENT_VERTICAL, new LayoutParams(FILL_PARENT, FILL_PARENT));
+		root_->SetExclusiveTouch(true);
+
+		root_->Add(new PaneTitleBar(gamePath_, gr->T("Patch"), "", new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
+
+		ScrollView *scroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, FILL_PARENT));
+		LinearLayout *content = new LinearLayout(ORIENT_VERTICAL);
+		content->padding.SetAll(8.0f);
+		content->SetSpacing(0.0f);
+		scroll->Add(content);
+		root_->Add(scroll);
+
+		Choice *back = new Choice(di->T("Back"), ImageID("I_NAVIGATE_BACK"));
+		back->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+		content->Add(back);
+
+		content->Add(new ItemHeader(gr->T("Patch")));
+		PopupSliderChoice *slider = new PopupSliderChoice(&g_Config.iGE2BloomReductionPercent, 0, 100, 60, gr->T("God Eater 2 bloom reduction"), screenManager(), "%");
+		slider->SetFormat("%d%%");
+		slider->SetLiveUpdate(true);
+		slider->SetEnabledFunc([]() {
+			return PSP_CoreParameter().compat.flags().ReduceBloomStrength && !g_Config.bSkipBufferEffects;
+		});
+		content->Add(slider);
+
+		Drawable backgroundWithAlpha(GetBackgroundColorWithAlpha(*screenManager()->getUIContext()));
+		content->SetBG(backgroundWithAlpha);
+	}
+
+	bool wantBrightBackground() const override { return true; }
+
+	const char *tag() const override { return "PatchSettings"; }
+
+private:
+	Path gamePath_;
+};
 
 class ScreenshotViewScreen : public UI::PopupScreen {
 public:
@@ -704,6 +752,12 @@ void GamePauseScreen::CreateViews() {
 		rightColumnItems->Add(new Choice(pa->T("Cheats"), ImageID("I_CHEAT")))->OnClick.Add([this](UI::EventParams &e) {
 			screenManager()->push(new CwCheatScreen(gamePath_));
 		});
+
+		Choice *patchChoice = rightColumnItems->Add(new Choice(gr->T("Patch"), ImageID("I_DISPLAY")));
+		patchChoice->OnClick.Add([this](UI::EventParams &) {
+			screenManager()->push(new PatchSettingsScreen(gamePath_));
+		});
+		patchChoice->SetEnabled(PSP_CoreParameter().compat.flags().ReduceBloomStrength && !g_Config.bSkipBufferEffects);
 	}
 
 	// TODO, also might be nice to show overall compat rating here?

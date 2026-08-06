@@ -369,6 +369,7 @@ public:
 	float fRemoteScrollPosition;
 	bool bReportAccurateFreeStorageSpace;
 	int iBloomHack; //0 = off, 1 = safe, 2 = balanced, 3 = aggressive
+	int iGE2BloomReductionPercent; // 0-100, reduces in-game bloom for God Eater 2 via compat flag
 	int iSkipGPUReadbackMode;  // 0 = off, 1 = skip, 2 = to texture
 	int iSplineBezierQuality; // 0 = low , 1 = Intermediate , 2 = High
 	bool bShaderCache;  // Hidden ini-only setting, useful for debugging shader compile times.

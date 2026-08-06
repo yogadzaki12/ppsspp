@@ -604,6 +604,7 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 		graphicsSettings->Add(new BitCheckBox(&g_Config.iShowStatusFlags, (int)ShowStatusFlags::BATTERY_PERCENT, gr->T("Show Battery %")));
 	}
 	AddOverlayList(graphicsSettings, screenManager());
+
 }
 
 void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {

@@ -980,8 +980,98 @@ static void ConvertBlendState(GenericBlendState &blendState, FBReadSetting useFB
 	const GEBlendMode blendFuncEq = gstate.getBlendEq();
 	GEBlendSrcFactor blendFuncA = gstate.getBlendFuncA();
 	GEBlendDstFactor blendFuncB = gstate.getBlendFuncB();
-	const u32 fixA = gstate.getFixA();
-	const u32 fixB = gstate.getFixB();
+	u32 fixA = gstate.getFixA();
+	u32 fixB = gstate.getFixB();
+	
+	// Reduce bloom strength for God Eater 2.
+	// Keep this conservative to avoid tinting/color bias in non-bloom passes.
+	if (PSP_CoreParameter().compat.flags().ReduceBloomStrength) {
+		const int bloomReduction = std::clamp(g_Config.iGE2BloomReductionPercent, 0, 100);
+		// Make reduction less aggressive so bloom remains visible at default settings.
+		const int effectiveReduction = bloomReduction * 40 / 100;
+		const int bloomScalePercent = 100 - effectiveReduction;
+		auto scaleBloomFixColor = [bloomScalePercent](u32 fixColor) {
+			u32 r = (fixColor >> 0) & 0xFF;
+			u32 g = (fixColor >> 8) & 0xFF;
+			u32 b = (fixColor >> 16) & 0xFF;
+
+			r = r * bloomScalePercent / 100;
+			g = g * bloomScalePercent / 100;
+			b = b * bloomScalePercent / 100;
+
+			return (b << 16) | (g << 8) | r;
+		};
+
+		auto isBrightBloomFixColor = [](u32 fixColor) {
+			const int r = (fixColor >> 0) & 0xFF;
+			const int g = (fixColor >> 8) & 0xFF;
+			const int b = (fixColor >> 16) & 0xFF;
+			const int maxc = std::max(r, std::max(g, b));
+			const int minc = std::min(r, std::min(g, b));
+			const int avg = (r + g + b) / 3;
+			// Keep this selective: bright and close-to-neutral constants are most commonly light-pass bloom.
+			return avg >= 150 && (maxc - minc) <= 56;
+		};
+
+		// Detect bloom/light-pass blending patterns in non-postprocessing draw calls.
+		// 1. Additive blending (ADD equation)
+		// 2. Common bloom/light blend modes: ONE+ONE, SRC_ALPHA+ONE, and bright FIX constant blends
+		bool isAdditiveBlend = (blendFuncEq == GE_BLENDMODE_MUL_AND_ADD);
+		bool isBloomBlendMode = false;
+		const bool hasBrightFixA = blendFuncA == GE_SRCBLEND_FIXA && isBrightBloomFixColor(fixA);
+		const bool hasBrightFixB = blendFuncB == GE_DSTBLEND_FIXB && isBrightBloomFixColor(fixB);
+		const bool isSceneSizedRT = gstate_c.curRTWidth >= 320 && gstate_c.curRTHeight >= 180;
+		const bool isLikelyAlphaComposite =
+			blendFuncB == GE_DSTBLEND_INVSRCALPHA ||
+			blendFuncB == GE_DSTBLEND_DOUBLEINVSRCALPHA ||
+			gstate.isAlphaTestEnabled() ||
+			gstate.isColorTestEnabled();
+		
+		// Check for typical bloom blending patterns
+		if (isAdditiveBlend) {
+			// ONE + ONE (pure additive - most common for bloom)
+			if ((blendFuncA == GE_SRCBLEND_SRCALPHA || blendFuncA == GE_SRCBLEND_DSTCOLOR) && 
+			    (blendFuncB == GE_DSTBLEND_SRCCOLOR || blendFuncB == GE_DSTBLEND_INVSRCCOLOR)) {
+				isBloomBlendMode = true;
+			}
+			// FIX constant blends are common in GE2 bloom/light composite passes.
+			else if (blendFuncA == GE_SRCBLEND_FIXA && blendFuncB == GE_DSTBLEND_SRCCOLOR) {
+				if (isBrightBloomFixColor(fixA)) {
+					isBloomBlendMode = true;
+				}
+			} else if (blendFuncA == GE_SRCBLEND_FIXA && blendFuncB == GE_DSTBLEND_FIXB) {
+				if (isBrightBloomFixColor(fixA) || isBrightBloomFixColor(fixB)) {
+					isBloomBlendMode = true;
+				}
+			}
+
+			// Some in-scene light shaders (not post-processing) use bright FIX constants on scene RTs.
+			if (!isBloomBlendMode && isSceneSizedRT && hasBrightFixA && hasBrightFixB && !isLikelyAlphaComposite) {
+				const bool srcLooksAdditive =
+					blendFuncA == GE_SRCBLEND_FIXA ||
+					blendFuncA == GE_SRCBLEND_DSTCOLOR;
+				const bool dstLooksAdditive =
+					blendFuncB == GE_DSTBLEND_SRCCOLOR ||
+					blendFuncB == GE_DSTBLEND_INVSRCCOLOR ||
+					blendFuncB == GE_DSTBLEND_FIXB;
+
+				if (srcLooksAdditive && dstLooksAdditive) {
+					isBloomBlendMode = true;
+				}
+			}
+		}
+		
+		// Apply bloom reduction only to detected bloom operations
+		if (isBloomBlendMode) {
+			// Scale bloom contribution according to user-configured reduction percent.
+			if (blendFuncA == GE_SRCBLEND_FIXA && isBrightBloomFixColor(fixA)) {
+				fixA = scaleBloomFixColor(fixA);
+			}
+			if (blendFuncB == GE_DSTBLEND_FIXB && isBrightBloomFixColor(fixB)) {
+				fixB = scaleBloomFixColor(fixB);
+			}
+		}
+	}
 
 	if (blendFuncA > GE_SRCBLEND_FIXA)
 		blendFuncA = GE_SRCBLEND_FIXA;

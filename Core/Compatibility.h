@@ -120,6 +120,7 @@ struct CompatFlags {
 	bool PersistentFramebuffers;
 	bool FileCreatedTimeHack;
 	bool FastEmulatedGPU;
+	bool ReduceBloomStrength;
 	bool CorrectCullAfterClip;
 	float SpriteBorderFix;
 	bool TextureCLUTInShader;
