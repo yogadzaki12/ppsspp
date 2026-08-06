@@ -1130,7 +1130,7 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 	default:
 		// To make sure we're not in an async context.
 		if (down) {
-			queuedVirtKeys_.push_back(virtualKeyCode);
+			queuedVirtKeys_.push_back(virtKey);
 		}
 		break;
 	}
