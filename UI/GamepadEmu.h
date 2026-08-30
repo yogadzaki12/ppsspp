@@ -35,6 +35,8 @@ public:
 	void Update() override;
 };
 
+ImageID GetButtonStyleImage(ImageID filled, ImageID line);
+
 class GamepadComponent : public UI::View {
 public:
 	GamepadComponent(std::string_view key, UI::LayoutParams *layoutParams);

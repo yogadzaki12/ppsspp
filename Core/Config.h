@@ -490,6 +490,10 @@ public:
 	int iTouchButtonStyle;
 	int iTouchButtonOpacity;
 	int iTouchButtonHideSeconds;
+	int iTouchButtonPressMode;
+	int iTouchButtonBorderGlow;
+	int iTouchButtonBlurSoftness;
+	int iTouchButtonBlurStrength;
 
 	// Snap touch control position
 	bool bTouchSnapToGrid;

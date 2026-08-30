@@ -144,7 +144,7 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 
 	// TODO: Less hacky layout work
 	const Bounds layoutBounds = GetLayoutBounds(*screenManager()->getUIContext());
-	leftColumn->Add(new ButtonPreview(g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg->shape].i : customKeyShapes[cfg->shape].l, 
+	leftColumn->Add(new ButtonPreview((g_Config.iTouchButtonStyle == 1) ? customKeyShapes[cfg->shape].l : customKeyShapes[cfg->shape].i,
 			customKeyImages[cfg->image].i, customKeyImages[cfg->image].r, customKeyShapes[cfg->shape].f, customKeyShapes[cfg->shape].r, layoutBounds.x + 62, layoutBounds.y + 102));
 
 	root__->Add(leftColumn);
@@ -169,7 +169,7 @@ void CustomButtonMappingScreen::CreateDialogViews(UI::ViewGroup *parent) {
 	});
 
 	Choice *shape = vertLayout->Add(new Choice(co->T("Shape")));
-	shape->SetIconRight(ImageID(customKeyShapes[cfg->shape].l), 0.6f, customKeyShapes[cfg->shape].r*PI/180, customKeyShapes[cfg->shape].f, false); // Set right icon on the choice
+	shape->SetIconRight(ImageID((g_Config.iTouchButtonStyle == 1) ? customKeyShapes[cfg->shape].l : customKeyShapes[cfg->shape].i), 0.6f, customKeyShapes[cfg->shape].r*PI/180, customKeyShapes[cfg->shape].f, false); // Set right icon on the choice
 	shape->OnClick.Add([=](UI::EventParams &e) {
 		auto shape = new ButtonShapeScreen(co->T("Shape"), &(cfg->shape));
 		if (e.v)

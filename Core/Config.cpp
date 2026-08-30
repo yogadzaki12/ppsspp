@@ -990,6 +990,10 @@ static const ConfigSetting controlSettings[] = {
 	ConfigSetting("TouchButtonStyle", SETTING(g_Config, iTouchButtonStyle), 1, CfgFlag::PER_GAME),
 	ConfigSetting("TouchButtonOpacity", SETTING(g_Config, iTouchButtonOpacity), 65, CfgFlag::PER_GAME),
 	ConfigSetting("TouchButtonHideSeconds", SETTING(g_Config, iTouchButtonHideSeconds), 8, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonPressMode", SETTING(g_Config, iTouchButtonPressMode), 0, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonBorderGlow", SETTING(g_Config, iTouchButtonBorderGlow), 0, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonBlurSoftness", SETTING(g_Config, iTouchButtonBlurSoftness), 60, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonBlurStrength", SETTING(g_Config, iTouchButtonBlurStrength), 65, CfgFlag::PER_GAME),
 	ConfigSetting("AutoCenterTouchAnalog", SETTING(g_Config, bAutoCenterTouchAnalog), false, CfgFlag::PER_GAME),
 	ConfigSetting("StickyTouchDPad", SETTING(g_Config, bStickyTouchDPad), false, CfgFlag::PER_GAME),
 

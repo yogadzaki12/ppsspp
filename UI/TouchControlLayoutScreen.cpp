@@ -95,7 +95,7 @@ public:
 	PSPActionButtons(ConfigTouchPos &pos, const char *key, float &spacing, const Bounds &screenBounds)
 		: DragDropButton(pos, key, ImageID::invalid(), ImageID::invalid(), screenBounds), spacing_(spacing) {
 		using namespace UI;
-		roundId_ = g_Config.iTouchButtonStyle ? ImageID("I_ROUND_LINE") : ImageID("I_ROUND");
+		roundId_ = GetButtonStyleImage(ImageID("I_ROUND"), ImageID("I_ROUND_LINE"));
 	};
 
 	void setCircleVisibility(bool visible) {
@@ -252,7 +252,7 @@ public:
 		static const float xoff[4] = {1, 0, -1, 0};
 		static const float yoff[4] = {0, 1, 0, -1};
 
-		ImageID dirImage = g_Config.iTouchButtonStyle ? ImageID("I_DIR_LINE") : ImageID("I_DIR");
+		ImageID dirImage = GetButtonStyleImage(ImageID("I_DIR"), ImageID("I_DIR_LINE"));
 
 		for (int i = 0; i < 4; i++) {
 			float r = D_pad_Radius * spacing_ * layoutAreaScale;
@@ -293,8 +293,8 @@ public:
 		float opacity = GamepadGetOpacity();
 		uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
 
-		const ImageID stickImage = g_Config.iTouchButtonStyle ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
-		const ImageID stickBg = g_Config.iTouchButtonStyle ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
+		const ImageID stickImage = GetButtonStyleImage(ImageID("I_STICK"), ImageID("I_STICK_LINE"));
+		const ImageID stickBg = GetButtonStyleImage(ImageID("I_STICK_BG"), ImageID("I_STICK_BG_LINE"));
 
 		dc.Draw()->DrawImage(stickBg, bounds_.centerX(), bounds_.centerY(), scale_, colorBg, ALIGN_CENTER);
 		dc.Draw()->DrawImage(stickImage, bounds_.centerX(), bounds_.centerY(), scale_ * spacing_, colorBg, ALIGN_CENTER);
@@ -487,11 +487,11 @@ void ControlLayoutView::CreateViews() {
 		controls_.push_back(actionButtons);
 	}
 
-	ImageID rectImage = g_Config.iTouchButtonStyle ? ImageID("I_RECT_LINE") : ImageID("I_RECT");
-	ImageID roundImage = g_Config.iTouchButtonStyle ? ImageID("I_ROUND_LINE") : ImageID("I_ROUND");
-	ImageID shoulderImage = g_Config.iTouchButtonStyle ? ImageID("I_SHOULDER_LINE") : ImageID("I_SHOULDER");
-	ImageID stickImage = g_Config.iTouchButtonStyle ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
-	ImageID stickBg = g_Config.iTouchButtonStyle ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
+	ImageID rectImage = GetButtonStyleImage(ImageID("I_RECT"), ImageID("I_RECT_LINE"));
+	ImageID roundImage = GetButtonStyleImage(ImageID("I_ROUND"), ImageID("I_ROUND_LINE"));
+	ImageID shoulderImage = GetButtonStyleImage(ImageID("I_SHOULDER"), ImageID("I_SHOULDER_LINE"));
+	ImageID stickImage = GetButtonStyleImage(ImageID("I_STICK"), ImageID("I_STICK_LINE"));
+	ImageID stickBg = GetButtonStyleImage(ImageID("I_STICK_BG"), ImageID("I_STICK_BG_LINE"));
 
 	auto addDragDropButton = [&](ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img) {
 		DragDropButton *b = nullptr;
@@ -527,7 +527,7 @@ void ControlLayoutView::CreateViews() {
 	auto addDragCustomKey = [&](ConfigTouchPos &pos, const char *key, const ConfigCustomButton& cfg) {
 		DragDropButton *b = nullptr;
 		if (pos.show) {
-			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyImages[cfg.image].i, bounds);
+			b = new DragDropButton(pos, key, (g_Config.iTouchButtonStyle == 1) ? customKeyShapes[cfg.shape].l : customKeyShapes[cfg.shape].i, customKeyImages[cfg.image].i, bounds);
 			b->FlipImageH(customKeyShapes[cfg.shape].f);
 			b->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
 			controls_.push_back(b);

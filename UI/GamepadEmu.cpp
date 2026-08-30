@@ -90,6 +90,40 @@ static u32 GetButtonColor() {
 	return g_Config.iTouchButtonStyle != 0 ? 0xFFFFFF : 0xc0b080;
 }
 
+ImageID GetButtonStyleImage(ImageID filled, ImageID line) {
+	return (g_Config.iTouchButtonStyle == 1) ? line : filled;
+}
+
+static float GetTouchPressScale(bool isDown) {
+	if (!isDown)
+		return 1.0f;
+	if (g_Config.iTouchButtonPressMode == 1)
+		return 0.88f;
+	return TOUCH_SCALE_FACTOR;
+}
+
+static void DrawBlurredImage(UIContext &dc, ImageID image, float x, float y, float scale, float angle, uint32_t tint, float alpha, bool flip) {
+	const float softness = std::max(0.0f, std::min(1.0f, g_Config.iTouchButtonBlurSoftness / 100.0f));
+	const float strength = std::max(0.0f, std::min(1.0f, g_Config.iTouchButtonBlurStrength / 100.0f));
+	const float spread = 10.0f + softness * 24.0f;
+	const float outerScale = 1.0f + softness * 0.28f;
+	const float blurAlpha = 0.04f + strength * 0.10f;
+
+	static const float offsets[][2] = {
+		{-1.0f, -1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {1.0f, 1.0f},
+		{-1.0f, 0.0f}, {1.0f, 0.0f}, {0.0f, -1.0f}, {0.0f, 1.0f},
+		{-2.0f, 0.0f}, {2.0f, 0.0f}, {0.0f, -2.0f}, {0.0f, 2.0f},
+	};
+
+	for (const auto &offset : offsets) {
+		dc.Draw()->DrawImageRotated(image, x + offset[0] * spread, y + offset[1] * spread, scale * outerScale, angle, colorAlpha(tint, alpha * blurAlpha), flip);
+	}
+	for (int i = 0; i < 2; ++i) {
+		dc.Draw()->DrawImageRotated(image, x, y, scale * (1.02f + i * 0.04f), angle, colorAlpha(tint, alpha * (0.26f + strength * 0.18f)), flip);
+	}
+	dc.Draw()->DrawImageRotated(image, x, y, scale, angle, colorAlpha(tint, alpha), flip);
+}
+
 GamepadComponent::GamepadComponent(std::string_view key, UI::LayoutParams *layoutParams) : UI::View(layoutParams), key_(key) {}
 
 static void rotateTouchHelper(float &dx, float &dy) {
@@ -183,17 +217,33 @@ void MultiTouchButton::Draw(UIContext &dc) {
 
 	float scale = scale_;
 	if (IsDownVisually()) {
-		if (g_Config.iTouchButtonStyle == 2) {
+		if (g_Config.iTouchButtonStyle == 2 || g_Config.iTouchButtonStyle == 3 || g_Config.iTouchButtonStyle == 4) {
 			opacity *= 1.35f;
+		} else if (g_Config.iTouchButtonStyle == 1) {
+			scale *= GetTouchPressScale(true);
+			opacity *= 1.15f;
 		} else {
-			scale *= TOUCH_SCALE_FACTOR;
+			scale *= GetTouchPressScale(true);
 			opacity *= 1.15f;
 		}
 	}
 
 	uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
 	uint32_t downBg = colorAlpha(0xFFFFFF, opacity * 0.5f);
+	uint32_t glassBg = colorAlpha(0xD9F7FF, opacity * 0.3f);
 	uint32_t color = colorAlpha(0xFFFFFF, opacity);
+
+	if (g_Config.iTouchButtonStyle == 3) {
+		const float glassScale = scale * 1.12f;
+		dc.Draw()->DrawImageRotated(bgImg_, bounds_.centerX(), bounds_.centerY(), glassScale, bgAngle_ * (M_PI * 2 / 360.0f), glassBg, flipImageH_);
+		if (IsDownVisually() && bgImg_ != bgDownImg_)
+			dc.Draw()->DrawImageRotated(bgDownImg_, bounds_.centerX(), bounds_.centerY(), glassScale, bgAngle_ * (M_PI * 2 / 360.0f), colorAlpha(0xFFFFFF, opacity * 0.22f), flipImageH_);
+	}
+	if (g_Config.iTouchButtonStyle == 4) {
+		DrawBlurredImage(dc, bgImg_, bounds_.centerX(), bounds_.centerY(), scale * 1.08f, bgAngle_ * (M_PI * 2 / 360.0f), colorBg, opacity * 0.9f, flipImageH_);
+		if (IsDownVisually() && bgImg_ != bgDownImg_)
+			DrawBlurredImage(dc, bgDownImg_, bounds_.centerX(), bounds_.centerY(), scale * 1.10f, bgAngle_ * (M_PI * 2 / 360.0f), 0xFFFFFF, opacity * 0.55f, flipImageH_);
+	}
 
 	if (IsDownVisually() && g_Config.iTouchButtonStyle == 2) {
 		if (bgImg_ != bgDownImg_)
@@ -483,10 +533,10 @@ void PSPDpad::Draw(UIContext &dc) {
 		float x2 = bounds_.centerX() + xoff[i] * (r + 10.f * scale_);
 		float y2 = bounds_.centerY() + yoff[i] * (r + 10.f * scale_);
 		float angle = i * (M_PI / 2.0f);
-		float imgScale = isDown ? scale_ * TOUCH_SCALE_FACTOR : scale_;
+		float imgScale = isDown ? scale_ * GetTouchPressScale(true) : scale_;
 		float imgOpacity = opacity;
 
-		if (isDown && g_Config.iTouchButtonStyle == 2) {
+		if (isDown && (g_Config.iTouchButtonStyle == 2 || g_Config.iTouchButtonStyle == 3 || g_Config.iTouchButtonStyle == 4)) {
 			imgScale = scale_;
 			imgOpacity *= 1.35f;
 
@@ -496,6 +546,13 @@ void PSPDpad::Draw(UIContext &dc) {
 		}
 
 		uint32_t colorBg = colorAlpha(GetButtonColor(), imgOpacity);
+		if (g_Config.iTouchButtonStyle == 3) {
+			uint32_t glassBg = colorAlpha(0xD9F7FF, imgOpacity * 0.25f);
+			dc.Draw()->DrawImageRotated(arrowIndex_, x, y, imgScale * 1.08f, angle + PI, glassBg, false);
+		}
+		if (g_Config.iTouchButtonStyle == 4) {
+			DrawBlurredImage(dc, arrowIndex_, x, y, imgScale * 1.1f, angle + PI, colorBg, imgOpacity * 0.85f, false);
+		}
 		uint32_t color = colorAlpha(0xFFFFFF, imgOpacity);
 
 		dc.Draw()->DrawImageRotated(arrowIndex_, x, y, imgScale, angle + PI, colorBg, false);
@@ -520,13 +577,6 @@ void PSPStick::Draw(UIContext &dc) {
 	if (opacity <= 0.0f)
 		return;
 
-	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2) {
-		opacity *= 1.35f;
-	}
-
-	uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
-	uint32_t downBg = colorAlpha(0x00FFFFFF, opacity * 0.5f);
-
 	if (centerX_ < 0.0f) {
 		centerX_ = bounds_.centerX();
 		centerY_ = bounds_.centerY();
@@ -534,16 +584,33 @@ void PSPStick::Draw(UIContext &dc) {
 
 	float stickX = centerX_;
 	float stickY = centerY_;
+	float pressScale = (dragPointerId_ != -1 && (g_Config.iTouchButtonStyle == 1 || g_Config.iTouchButtonStyle == 2)) ? GetTouchPressScale(true) : 1.0f;
+
+	if (dragPointerId_ != -1 && (g_Config.iTouchButtonStyle == 2 || g_Config.iTouchButtonStyle == 3 || g_Config.iTouchButtonStyle == 4)) {
+		opacity *= 1.35f;
+	}
+
+	uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
+	uint32_t downBg = colorAlpha(0x00FFFFFF, opacity * 0.5f);
+	if (g_Config.iTouchButtonStyle == 3) {
+		uint32_t glassBg = colorAlpha(0xD9F7FF, opacity * 0.25f);
+		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.2f * scale_, glassBg, ALIGN_CENTER);
+	}
+	if (g_Config.iTouchButtonStyle == 4) {
+		DrawBlurredImage(dc, bgImg_, stickX, stickY, 1.18f * scale_, 0.0f, colorBg, opacity * 0.9f, false);
+	}
 
 	float dx, dy;
 	__CtrlPeekAnalog(stick_, &dx, &dy);
 	rotateTouchHelper(dx, dy);
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+	float headScale = stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale;
+	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 1)
+		headScale *= GetTouchPressScale(true);
 
 	if (!config.bHideStickBackground)
-		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
-	float headScale = stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale;
+		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_ * pressScale, colorBg, ALIGN_CENTER);
 	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2 && stickDownImg_ != stickImageIndex_)
 		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
 	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
@@ -638,13 +705,6 @@ void PSPCustomStick::Draw(UIContext &dc) {
 	if (opacity <= 0.0f)
 		return;
 
-	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2) {
-		opacity *= 1.35f;
-	}
-
-	uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
-	uint32_t downBg = colorAlpha(0x00FFFFFF, opacity * 0.5f);
-
 	if (centerX_ < 0.0f) {
 		centerX_ = bounds_.centerX();
 		centerY_ = bounds_.centerY();
@@ -652,15 +712,32 @@ void PSPCustomStick::Draw(UIContext &dc) {
 
 	float stickX = centerX_;
 	float stickY = centerY_;
+	float pressScale = (dragPointerId_ != -1 && (g_Config.iTouchButtonStyle == 1 || g_Config.iTouchButtonStyle == 2)) ? GetTouchPressScale(true) : 1.0f;
+
+	if (dragPointerId_ != -1 && (g_Config.iTouchButtonStyle == 2 || g_Config.iTouchButtonStyle == 3 || g_Config.iTouchButtonStyle == 4)) {
+		opacity *= 1.35f;
+	}
+
+	uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
+	uint32_t downBg = colorAlpha(0x00FFFFFF, opacity * 0.5f);
+	if (g_Config.iTouchButtonStyle == 3) {
+		uint32_t glassBg = colorAlpha(0xD9F7FF, opacity * 0.25f);
+		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.2f * scale_ * pressScale, glassBg, ALIGN_CENTER);
+	}
+	if (g_Config.iTouchButtonStyle == 4) {
+		DrawBlurredImage(dc, bgImg_, stickX, stickY, 1.18f * scale_ * pressScale, 0.0f, colorBg, opacity * 0.9f, false);
+	}
 
 	float dx, dy;
 	dx = posX_;
 	dy = -posY_;
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
-	const float headScale = config.fRightStickHeadScale;
+	float headScale = config.fRightStickHeadScale;
+	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 1)
+		headScale *= GetTouchPressScale(true);
 	if (!config.bHideStickBackground)
-		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_ * pressScale, colorBg, ALIGN_CENTER);
 	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2 && stickDownImg_ != stickImageIndex_)
 		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
 	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
@@ -1019,11 +1096,11 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 
 	const int halfW = xres / 2;
 
-	const ImageID roundImage = g_Config.iTouchButtonStyle ? ImageID("I_ROUND_LINE") : ImageID("I_ROUND");
-	const ImageID rectImage = g_Config.iTouchButtonStyle ? ImageID("I_RECT_LINE") : ImageID("I_RECT");
-	const ImageID shoulderImage = g_Config.iTouchButtonStyle ? ImageID("I_SHOULDER_LINE") : ImageID("I_SHOULDER");
-	const ImageID stickImage = g_Config.iTouchButtonStyle ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
-	const ImageID stickBg = g_Config.iTouchButtonStyle ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
+	const ImageID roundImage = GetButtonStyleImage(ImageID("I_ROUND"), ImageID("I_ROUND_LINE"));
+	const ImageID rectImage = GetButtonStyleImage(ImageID("I_RECT"), ImageID("I_RECT_LINE"));
+	const ImageID shoulderImage = GetButtonStyleImage(ImageID("I_SHOULDER"), ImageID("I_SHOULDER_LINE"));
+	const ImageID stickImage = GetButtonStyleImage(ImageID("I_STICK"), ImageID("I_STICK_LINE"));
+	const ImageID stickBg = GetButtonStyleImage(ImageID("I_STICK_BG"), ImageID("I_STICK_BG_LINE"));
 
 	auto addPSPButton = [this, buttonLayoutParams](int buttonBit, const char *key, ImageID bgImg, ImageID bgDownImg, ImageID img, const ConfigTouchPos &touch, ButtonOffset off = { 0, 0 }) -> PSPButton * {
 		if (touch.show) {
@@ -1045,7 +1122,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 
 			// Note: cfg.shape and cfg.image are bounds-checked elsewhere.
 			auto aux = Add(new CustomButton(cfg.key, key, cfg.toggle, cfg.repeat, controlMapper,
-					g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyShapes[cfg.shape].i,
+					(g_Config.iTouchButtonStyle == 1) ? customKeyShapes[cfg.shape].l : customKeyShapes[cfg.shape].i, customKeyShapes[cfg.shape].i,
 					customKeyImages[cfg.image].i, touch.scale, customKeyShapes[cfg.shape].d, buttonLayoutParams(touch)));
 			aux->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
 			aux->FlipImageH(customKeyShapes[cfg.shape].f);
@@ -1090,7 +1167,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 		rTrigger->FlipImageH(true);
 
 	if (config.touchDpad.show) {
-		const ImageID dirImage = g_Config.iTouchButtonStyle ? ImageID("I_DIR_LINE") : ImageID("I_DIR");
+		const ImageID dirImage = GetButtonStyleImage(ImageID("I_DIR"), ImageID("I_DIR_LINE"));
 		Add(new PSPDpad(dirImage, "D-pad", ImageID("I_DIR"), ImageID("I_ARROW"), config.touchDpad.scale, config.fDpadSpacing, buttonLayoutParams(config.touchDpad)));
 	}
 

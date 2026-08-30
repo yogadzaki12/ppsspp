@@ -836,13 +836,33 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		});
 		gesture->SetEnabledPtr(&g_Config.bShowTouchControls);
 
-		static const char *touchControlStyles[] = { "Classic", "Thin borders", "Glowing borders" };
-		View *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
+		static const char *touchControlStyles[] = { "Classic", "Bordered", "Glass", "Blurred" };
+		PopupMultiChoice *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
+		static const char *touchButtonGlowModes[] = { "No glow", "Glow" };
+		PopupMultiChoice *borderGlow = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonBorderGlow, co->T("Border glow"), touchButtonGlowModes, 0, ARRAY_SIZE(touchButtonGlowModes), I18NCat::CONTROLS, screenManager()));
+		borderGlow->SetEnabledPtr(&g_Config.bShowTouchControls);
 
 		PopupSliderChoice *opacity = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, 65, co->T("Button Opacity"), screenManager(), "%"));
 		opacity->SetEnabledPtr(&g_Config.bShowTouchControls);
 		opacity->SetFormat("%i%%");
+		static const char *touchButtonPressMode[] = { "Enlarge when pressed", "Shrink when pressed" };
+		PopupMultiChoice *pressMode = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonPressMode, co->T("Press effect"), touchButtonPressMode, 0, ARRAY_SIZE(touchButtonPressMode), I18NCat::CONTROLS, screenManager()));
+		pressMode->SetEnabledPtr(&g_Config.bShowTouchControls);
+		PopupSliderChoice *blurSoftness = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonBlurSoftness, 0, 100, 60, co->T("Blur softness"), screenManager(), "%"));
+		blurSoftness->SetEnabledPtr(&g_Config.bShowTouchControls);
+		blurSoftness->SetFormat("%i%%");
+		PopupSliderChoice *blurStrength = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonBlurStrength, 0, 100, 65, co->T("Blur strength"), screenManager(), "%"));
+		blurStrength->SetEnabledPtr(&g_Config.bShowTouchControls);
+		blurStrength->SetFormat("%i%%");
+		const bool showBlurSettings = g_Config.iTouchButtonStyle == 3;
+		blurSoftness->SetVisibility(showBlurSettings ? UI::V_VISIBLE : UI::V_GONE);
+		blurStrength->SetVisibility(showBlurSettings ? UI::V_VISIBLE : UI::V_GONE);
+		style->OnChoice.Add([blurSoftness, blurStrength](UI::EventParams &) {
+			const bool showBlurSettings = g_Config.iTouchButtonStyle == 3;
+			blurSoftness->SetVisibility(showBlurSettings ? UI::V_VISIBLE : UI::V_GONE);
+			blurStrength->SetVisibility(showBlurSettings ? UI::V_VISIBLE : UI::V_GONE);
+		});
 		PopupSliderChoice *autoHide = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonHideSeconds, 0, 300, 20, co->T("Auto-hide buttons after delay"), screenManager(), di->T("seconds, 0:off")));
 		autoHide->SetEnabledPtr(&g_Config.bShowTouchControls);
 		autoHide->SetFormat(di->T("%d seconds"));
