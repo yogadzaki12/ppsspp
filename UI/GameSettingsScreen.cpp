@@ -877,7 +877,7 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		});
 		gesture->SetEnabledPtr(&g_Config.bShowTouchControls);
 
-		static const char *touchControlStyles[] = { "Classic", "Thin borders", "Glowing borders" };
+		static const char *touchControlStyles[] = { "Classic", "Thin borders", "Glowing borders", "Glass", "Blurred" };
 		View *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
 
