@@ -43,9 +43,10 @@ static u32 GetButtonColor() {
 
 class DragDropButton : public MultiTouchButton {
 public:
-	DragDropButton(ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img, const Bounds &screenBounds)
+	DragDropButton(ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img, const Bounds &screenBounds,
+		bool summaryShow = false, std::string summaryText = {}, int summaryPosition = 0, int summaryMargin = 0)
 	: MultiTouchButton(key, bgImg, bgImg, img, pos.scale, new UI::AnchorLayoutParams(pos.x * screenBounds.w, pos.y * screenBounds.h, UI::NONE, UI::NONE, UI::Centering::Both)),
-		x_(pos.x), y_(pos.y), theScale_(pos.scale), screenBounds_(screenBounds) {
+		x_(pos.x), y_(pos.y), theScale_(pos.scale), screenBounds_(screenBounds), summaryShow_(summaryShow), summaryText_(std::move(summaryText)), summaryPosition_(summaryPosition), summaryMargin_(summaryMargin) {
 		scale_ = theScale_;
 	}
 
@@ -59,6 +60,33 @@ public:
 	void Draw(UIContext &dc) override {
 		scale_ = theScale_*layoutAreaScale; // Scale down just for rendering
 		MultiTouchButton::Draw(dc);
+
+		if (summaryShow_ && !summaryText_.empty()) {
+			static constexpr float marginSizes[] = { 0.0f, 6.0f, 12.0f, 20.0f };
+			const int position = std::clamp(summaryPosition_, 0, 4);
+			const int margin = std::clamp(summaryMargin_, 0, 3);
+			const float offset = marginSizes[margin] * scale_;
+			const uint32_t textColor = colorAlpha(0xFFFFFF, std::max(GamepadGetOpacity(), 0.6f));
+
+			switch (position) {
+			case 0:
+				dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.centerY(), textColor, ALIGN_HCENTER | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+				break;
+			case 1:
+				dc.DrawTextShadow(summaryText_, bounds_.x - offset, bounds_.centerY(), textColor, ALIGN_RIGHT | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+				break;
+			case 2:
+				dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y2() + offset, textColor, ALIGN_HCENTER | ALIGN_TOP | FLAG_WRAP_TEXT);
+				break;
+			case 3:
+				dc.DrawTextShadow(summaryText_, bounds_.x2() + offset, bounds_.centerY(), textColor, ALIGN_LEFT | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+				break;
+			case 4:
+				dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y - offset, textColor, ALIGN_HCENTER | ALIGN_BOTTOM | FLAG_WRAP_TEXT);
+				break;
+			}
+		}
+
 		scale_ = theScale_/layoutAreaScale; // is this is needed?
 	}
 
@@ -87,6 +115,10 @@ protected:
 	const Bounds &screenBounds_;
 	float &theScale_;
 	float &x_, &y_;
+	bool summaryShow_;
+	std::string summaryText_;
+	int summaryPosition_;
+	int summaryMargin_;
 };
 
 class PSPActionButtons : public DragDropButton {
@@ -523,10 +555,11 @@ void ControlLayoutView::CreateViews() {
 		controls_.push_back(new PSPStickDragDrop(touch.touchRightAnalogStick, "Right analog stick", stickBg, stickImage, bounds, touch.fRightStickHeadScale));
 	}
 
-	auto addDragCustomKey = [&](ConfigTouchPos &pos, const char *key, const ConfigCustomButton& cfg) {
+	auto addDragCustomKey = [&](ConfigTouchPos &pos, const char *key, const ConfigCustomButton& cfg, bool summaryShow, const std::string &summaryText, int summaryPosition, int summaryMargin) {
 		DragDropButton *b = nullptr;
 		if (pos.show) {
-			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyImages[cfg.image].i, bounds);
+			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyImages[cfg.image].i, bounds,
+				summaryShow, summaryText, summaryPosition, summaryMargin);
 			b->FlipImageH(customKeyShapes[cfg.shape].f);
 			b->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
 			controls_.push_back(b);
@@ -545,7 +578,7 @@ void ControlLayoutView::CreateViews() {
 
 		char temp[64];
 		snprintf(temp, sizeof(temp), "Custom %d button", i);
-		addDragCustomKey(touch.touchCustom[i], temp, g_Config.CustomButton[i]);
+		addDragCustomKey(touch.touchCustom[i], temp, g_Config.CustomButton[i], g_Config.bCustomButtonSummary[i], g_Config.sCustomButtonSummaryText[i], g_Config.iCustomButtonSummaryPosition[i], g_Config.iCustomButtonSummaryMargin[i]);
 	}
 
 	for (size_t i = 0; i < controls_.size(); i++) {
