@@ -68,6 +68,15 @@ struct ReplacedTextureDecodeInfo {
 	Draw::DataFormat fmt;
 };
 
+struct AnimationTextureInfo {
+	std::vector<std::string> frames;
+	int delayMs = 100;
+	bool loop = true;
+	int currentFrame = 0;
+	double lastFrameTime = 0.0;
+	bool stopped = false;
+};
+
 enum class ReplacerDecimateMode {
 	NEW_FRAME,
 	FORCE_PRESSURE,
@@ -154,6 +163,7 @@ protected:
 
 	std::unordered_map<ReplacementCacheKey, std::string> aliases_;
 	std::unordered_map<ReplacementCacheKey, TextureFiltering> filtering_;
+	std::unordered_map<ReplacementCacheKey, AnimationTextureInfo> animationInfo_;
 
 	std::unordered_map<ReplacementCacheKey, ReplacedTextureRef> cache_;
 	std::unordered_map<ReplacementCacheKey, SavedTextureCacheData> savedCache_;

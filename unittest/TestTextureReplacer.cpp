@@ -1,5 +1,7 @@
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 #include <vector>
 
 #include "Common/Data/Format/PNGLoad.h"
@@ -74,6 +76,35 @@ static bool CreateTestPack(const Path &packDir) {
 	return true;
 }
 
+static bool CreateAnimatedTestPack(const Path &packDir) {
+	File::DeleteDirRecursively(packDir);
+	if (!File::CreateDir(packDir)) {
+		return false;
+	}
+
+	static const char *iniContent =
+		"[options]\n"
+		"hash = quick\n"
+		"version = 1\n"
+		"\n"
+		"[animation]\n"
+		"A0000001C000000110000001 = tex_anim_1.png, tex_anim_2.png\n"
+		"\n"
+		"[animation.A0000001C000000110000001]\n"
+		"delay = 1\n";
+
+	FILE *f = File::OpenCFile(packDir / "textures.ini", "w");
+	if (!f) {
+		return false;
+	}
+	fwrite(iniContent, 1, strlen(iniContent), f);
+	fclose(f);
+
+	if (!CreateTestPNG(packDir / "tex_anim_1.png", 64, 64, 0xFF0000FF)) return false;
+	if (!CreateTestPNG(packDir / "tex_anim_2.png", 64, 64, 0x00FF00FF)) return false;
+	return true;
+}
+
 static bool TestLookups(TextureReplacer *replacer) {
 	// Key A: single mip, found.
 	ReplacedTexture *texA = replacer->FindReplacement(ReplacementCacheKey(KEY_A, HASH_A), 64, 64);
@@ -141,6 +172,23 @@ static bool TestLookups(TextureReplacer *replacer) {
 	return true;
 }
 
+static bool TestAnimatedLookups(TextureReplacer *replacer) {
+	ReplacementCacheKey key(KEY_A, HASH_A);
+	ReplacedTexture *tex = replacer->FindReplacement(key, 64, 64);
+	EXPECT_TRUE(tex != nullptr);
+	if (!tex) {
+		return false;
+	}
+
+	EXPECT_TRUE(tex->Poll(1.0));
+	std::string initial = tex->Desc().filenames.front();
+	std::this_thread::sleep_for(std::chrono::milliseconds(20));
+	EXPECT_TRUE(tex->Poll(1.0));
+	EXPECT_TRUE(tex->Desc().filenames.front() != initial);
+
+	return true;
+}
+
 bool TestTextureReplacer() {
 	Path packDir = Path("unittest_texture_pack");
 	if (!CreateTestPack(packDir)) {
@@ -161,5 +209,25 @@ bool TestTextureReplacer() {
 	}
 
 	File::DeleteDirRecursively(packDir);
+
+	Path animatedPackDir = Path("unittest_texture_pack_anim");
+	if (!CreateAnimatedTestPack(animatedPackDir)) {
+		return false;
+	}
+
+	TextureReplacer animatedReplacer(nullptr);
+	std::string animatedError;
+	if (!animatedReplacer.LoadPackForTesting(animatedPackDir, &animatedError)) {
+		ERROR_LOG(Log::G3D, "Failed to load animated test texture pack: %s", animatedError.c_str());
+		File::DeleteDirRecursively(animatedPackDir);
+		return false;
+	}
+
+	if (!TestAnimatedLookups(&animatedReplacer)) {
+		File::DeleteDirRecursively(animatedPackDir);
+		return false;
+	}
+
+	File::DeleteDirRecursively(animatedPackDir);
 	return true;
 }

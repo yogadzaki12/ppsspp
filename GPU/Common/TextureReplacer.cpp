@@ -55,6 +55,8 @@ static bool basisu_initialized = false;
 
 static void ScanForHashNamedFiles(VFSBackend *dir, std::map<ReplacementCacheKey, std::map<int, std::string>> *filenameMap);
 static void ComputeAliasMap(std::unordered_map<ReplacementCacheKey, std::string> *aliases, const std::map<ReplacementCacheKey, std::map<int, std::string>> &filenameMap);
+static bool ParseDelayMs(std::string_view value, int *delayMs);
+static void ParseAnimationSection(IniFile &ini, std::unordered_map<ReplacementCacheKey, AnimationTextureInfo> *animationInfo);
 
 TextureReplacer::TextureReplacer(Draw::DrawContext *draw) {
 	if (!basisu_initialized) {
@@ -135,6 +137,7 @@ void TextureReplacer::NotifyConfigChanged() {
 bool TextureReplacer::LoadIni(std::string *error, bool notify) {
 	textureHash_ = ReplacedTextureHash::QUICK;
 	aliases_.clear();
+	animationInfo_.clear();
 	hashranges_.clear();
 	filtering_.clear();
 	reducehashranges_.clear();
@@ -302,6 +305,86 @@ static void ComputeAliasMap(std::unordered_map<ReplacementCacheKey, std::string>
 	}
 }
 
+static bool ParseDelayMs(std::string_view value, int *delayMs) {
+	if (delayMs == nullptr) {
+		return false;
+	}
+	std::string trimmed(value);
+	trimmed = Trim(trimmed);
+	if (trimmed.empty()) {
+		return false;
+	}
+
+	std::string lower;
+	lower.reserve(trimmed.size());
+	for (char ch : trimmed) {
+		lower.push_back((char)tolower((unsigned char)ch));
+	}
+	if (lower.size() >= 2 && lower.substr(lower.size() - 2) == "ms") {
+		trimmed = trimmed.substr(0, trimmed.size() - 2);
+	} else if (lower.size() >= 11 && lower.substr(lower.size() - 11) == "milliseconds") {
+		trimmed = trimmed.substr(0, trimmed.size() - 11);
+	} else if (lower.size() >= 1 && lower.back() == 's') {
+		trimmed = trimmed.substr(0, trimmed.size() - 1);
+		*delayMs = (int)(std::stod(trimmed) * 1000.0);
+		return true;
+	}
+	
+	double parsed = 0.0;
+	if (!TryParse(trimmed, &parsed)) {
+		return false;
+	}
+	*delayMs = (int)parsed;
+	return true;
+}
+
+static void ParseAnimationSection(IniFile &ini, std::unordered_map<ReplacementCacheKey, AnimationTextureInfo> *animationInfo) {
+	if (!animationInfo) {
+		return;
+	}
+	for (const auto &section : ini.Sections()) {
+		const std::string &name = section->name();
+		if (name == "animation") {
+			for (const auto &line : section->Lines()) {
+				if (line.Key().empty())
+					continue;
+				ReplacementCacheKey key(0, 0);
+				if (sscanf(std::string(line.Key()).c_str(), "%16llx%8x", &key.cachekey, &key.hash) >= 1) {
+					std::vector<std::string> frames;
+					SplitString(line.Value(), ',', frames);
+					for (std::string &frame : frames) {
+						frame = Trim(frame);
+						if (!frame.empty()) {
+							for (char &c : frame) {
+								if (c == '\\') c = '/';
+							}
+							(*animationInfo)[key].frames.push_back(frame);
+						}
+					}
+					if (!(*animationInfo)[key].frames.empty()) {
+						(*animationInfo)[key].delayMs = 100;
+					}
+				}
+			}
+		} else if (startsWith(name, "animation.")) {
+			std::string hashName = name.substr(strlen("animation."));
+			ReplacementCacheKey key(0, 0);
+			if (sscanf(hashName.c_str(), "%16llx%8x", &key.cachekey, &key.hash) >= 1) {
+				int delayMs = 100;
+				if (section->Get("delay", &delayMs)) {
+					(*animationInfo)[key].delayMs = delayMs;
+				} else {
+					std::string delay;
+					if (section->Get("delay", &delay)) {
+						ParseDelayMs(delay, &delayMs);
+						(*animationInfo)[key].delayMs = delayMs;
+					}
+				}
+			}
+		}
+	}
+}
+
 bool TextureReplacer::LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverride, std::string *error) {
 	INFO_LOG(Log::G3D, "Loading ini values...");
 
@@ -412,6 +495,8 @@ bool TextureReplacer::LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverri
 		g_OSD.Show(OSDType::MESSAGE_WARNING, err->T("textures.ini filenames may not be cross - platform(banned characters)"), badFilenames, 6.0f);
 		WARN_LOG(Log::TexReplacement, "Potentially bad filenames: %s", badFilenames.c_str());
 	}
+
+	ParseAnimationSection(ini, &animationInfo_);
 
 	if (ini.HasSection("hashranges")) {
 		auto hashranges = ini.GetOrCreateSection("hashranges")->ToMap();
@@ -624,6 +709,69 @@ ReplacedTexture *TextureReplacer::FindReplacement(ReplacementCacheKey replacemen
 	// Only actually replace if we're replacing.  We might just be saving.
 	if (!replaceEnabled_) {
 		return nullptr;
+	}
+
+	auto animated = animationInfo_.find(replacementKey);
+	if (animated != animationInfo_.end() && !animated->second.frames.empty()) {
+		auto &anim = animated->second;
+		if (anim.delayMs <= 0) {
+			anim.delayMs = 100;
+		}
+		if (anim.lastFrameTime == 0.0) {
+			anim.lastFrameTime = time_now_d();
+		}
+
+		const double now = time_now_d();
+		if (!anim.stopped) {
+			const double elapsed = now - anim.lastFrameTime;
+			const double delaySec = (double)anim.delayMs / 1000.0;
+			if (elapsed >= delaySec) {
+				const int steps = (int)(elapsed / delaySec);
+				if (anim.frames.size() > 1) {
+					if (anim.loop) {
+						anim.currentFrame = (anim.currentFrame + steps) % (int)anim.frames.size();
+					} else {
+						const int nextFrame = anim.currentFrame + steps;
+						if (nextFrame >= (int)anim.frames.size()) {
+							anim.currentFrame = (int)anim.frames.size() - 1;
+							anim.stopped = true;
+						} else {
+							anim.currentFrame = nextFrame;
+						}
+					}
+				}
+				anim.lastFrameTime += (double)steps * delaySec;
+			}
+		}
+
+		std::string hashfiles = anim.frames[anim.currentFrame];
+		std::vector<std::string> filenames;
+		SplitString(hashfiles, '|', filenames);
+		if (!filenames.empty()) {
+			auto iter = levelCache_.find(hashfiles);
+			if (iter != levelCache_.end()) {
+				return iter->second;
+			}
+			ReplacementDesc desc;
+			desc.newW = w;
+			desc.newH = h;
+			desc.w = w;
+			desc.h = h;
+			desc.cacheKey = replacementKey;
+			desc.forceFiltering = (TextureFiltering)0;
+			desc.logId = hashfiles;
+			desc.hashfiles = hashfiles;
+			desc.filenames = filenames;
+			desc.basePath = basePath_;
+			desc.formatSupport = formatSupport_;
+			ReplacedTexture *texture = new ReplacedTexture(vfs_, desc);
+			ReplacedTextureRef ref;
+			ref.hashfiles = hashfiles;
+			ref.texture = texture;
+			cache_.emplace(std::make_pair(replacementKey, ref));
+			levelCache_.emplace(std::make_pair(hashfiles, texture));
+			return texture;
+		}
 	}
 
 	auto it = cache_.find(replacementKey);
