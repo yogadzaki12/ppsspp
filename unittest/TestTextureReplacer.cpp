@@ -74,6 +74,64 @@ static bool CreateTestPack(const Path &packDir) {
 	return true;
 }
 
+static bool CreateAnimatedTestPack(const Path &packDir) {
+	File::DeleteDirRecursively(packDir);
+	if (!File::CreateDir(packDir)) {
+		return false;
+	}
+
+	static const char *iniContent =
+		"[options]\n"
+		"hash = quick\n"
+		"version = 1\n"
+		"\n"
+		"[hashes]\n"
+		"A0000009C000000910000009 = test/mytexture\n"
+		"A000000AC000000A10000000A = test/mytexture_noloop\n";
+	FILE *f = File::OpenCFile(packDir / "textures.ini", "w");
+	if (!f) {
+		return false;
+	}
+	fwrite(iniContent, 1, strlen(iniContent), f);
+	fclose(f);
+
+	if (!File::CreateDir(packDir / "test")) return false;
+	if (!File::CreateDir(packDir / "test/mytexture")) return false;
+	if (!File::CreateDir(packDir / "test/mytexture_noloop")) return false;
+
+	static const char *animIni =
+		"[Animation]\n"
+		"fps = 10\n"
+		"loop = true\n";
+	FILE *ini = File::OpenCFile(packDir / "test/mytexture/texture.ini", "w");
+	if (!ini) {
+		return false;
+	}
+	fwrite(animIni, 1, strlen(animIni), ini);
+	fclose(ini);
+
+	static const char *animIniNoLoop =
+		"[Animation]\n"
+		"fps = 10\n"
+		"loop = false\n";
+	FILE *ini2 = File::OpenCFile(packDir / "test/mytexture_noloop/texture.ini", "w");
+	if (!ini2) {
+		return false;
+	}
+	fwrite(animIniNoLoop, 1, strlen(animIniNoLoop), ini2);
+	fclose(ini2);
+
+	if (!CreateTestPNG(packDir / "test/mytexture/0.png", 64, 64, 0xFF0000FF)) return false;
+	if (!CreateTestPNG(packDir / "test/mytexture/1.png", 64, 64, 0x00FF00FF)) return false;
+	if (!CreateTestPNG(packDir / "test/mytexture/2.png", 64, 64, 0x0000FFFF)) return false;
+
+	if (!CreateTestPNG(packDir / "test/mytexture_noloop/0.png", 64, 64, 0xFF0000FF)) return false;
+	if (!CreateTestPNG(packDir / "test/mytexture_noloop/1.png", 64, 64, 0x00FF00FF)) return false;
+	if (!CreateTestPNG(packDir / "test/mytexture_noloop/2.png", 64, 64, 0x0000FFFF)) return false;
+
+	return true;
+}
+
 static bool TestLookups(TextureReplacer *replacer) {
 	// Key A: single mip, found.
 	ReplacedTexture *texA = replacer->FindReplacement(ReplacementCacheKey(KEY_A, HASH_A), 64, 64);
@@ -141,6 +199,72 @@ static bool TestLookups(TextureReplacer *replacer) {
 	return true;
 }
 
+static bool TestAnimatedTexture(TextureReplacer *replacer) {
+	ReplacementCacheKey animKey(0xA0000009C0000009ULL, 0x10000009);
+	ReplacedTexture *tex = replacer->FindReplacement(animKey, 64, 64);
+	EXPECT_TRUE(tex != nullptr);
+	EXPECT_TRUE(tex->IsAnimated());
+	EXPECT_EQ_INT(tex->AnimationFrameCount(), 3);
+	EXPECT_EQ_FLOAT(tex->AnimationFPS(), 10.0f);
+	EXPECT_TRUE(tex->AnimationLoops());
+	if (!tex) {
+		return false;
+	}
+	EXPECT_TRUE(tex->Poll(1.0));
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 0);
+	
+	// Test animation timing and frame advancement
+	// FPS = 10, so each frame takes 0.1 seconds
+	// Frame 0 initially
+	
+	// Advance by 0.05 seconds (half a frame) - should stay at frame 0
+	tex->UpdateAnimation(0.05);
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 0);
+	
+	// Advance by another 0.06 seconds (total 0.11) - should move to frame 1
+	tex->UpdateAnimation(0.06);
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 1);
+	
+	// Advance by 0.2 seconds (should skip frames) - from frame 1 + 0.2 = frame 3
+	// But we only have 3 frames (0, 1, 2), so with loop it wraps to frame 0
+	tex->UpdateAnimation(0.2);
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 0);  // 1 + 2 frames = frame 3 % 3 = frame 0
+	
+	return true;
+}
+
+static bool TestNonLoopingAnimatedTexture(TextureReplacer *replacer) {
+	ReplacementCacheKey animKey(0xA000000AC000000AULL, 0x1000000A);
+	ReplacedTexture *tex = replacer->FindReplacement(animKey, 64, 64);
+	EXPECT_TRUE(tex != nullptr);
+	EXPECT_TRUE(tex->IsAnimated());
+	EXPECT_EQ_INT(tex->AnimationFrameCount(), 3);
+	EXPECT_EQ_FLOAT(tex->AnimationFPS(), 10.0f);
+	EXPECT_TRUE(!tex->AnimationLoops());  // Should not loop
+	if (!tex) {
+		return false;
+	}
+	EXPECT_TRUE(tex->Poll(1.0));
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 0);
+	EXPECT_TRUE(tex->AnimationCurrentFrame() == 0 || tex->AnimationCurrentFrame() == 1);  // Allow poll to advance
+	
+	// Reset to known state
+	tex->ResetAnimation();
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 0);
+	
+	// Advance to frame 2 (last frame)
+	tex->UpdateAnimation(0.25);  // 2.5 frames = frame 2
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 2);
+	EXPECT_TRUE(tex->AnimationCurrentFrame() < 3);  // Sanity check
+	
+	// Advance past last frame - should stay at frame 2 and become inactive
+	tex->UpdateAnimation(0.15);  // +1.5 frames, would be frame 3 but clamped to 2
+	EXPECT_EQ_INT(tex->AnimationCurrentFrame(), 2);
+	// Note: AnimationInstance has 'active' flag but no getter for it
+	
+	return true;
+}
+
 bool TestTextureReplacer() {
 	Path packDir = Path("unittest_texture_pack");
 	if (!CreateTestPack(packDir)) {
@@ -161,5 +285,29 @@ bool TestTextureReplacer() {
 	}
 
 	File::DeleteDirRecursively(packDir);
+
+	Path animatedPackDir = Path("unittest_animated_texture_pack");
+	if (!CreateAnimatedTestPack(animatedPackDir)) {
+		return false;
+	}
+
+	TextureReplacer animatedReplacer(nullptr);
+	if (!animatedReplacer.LoadPackForTesting(animatedPackDir, &error)) {
+		ERROR_LOG(Log::G3D, "Failed to load animated test texture pack: %s", error.c_str());
+		File::DeleteDirRecursively(animatedPackDir);
+		return false;
+	}
+
+	if (!TestAnimatedTexture(&animatedReplacer)) {
+		File::DeleteDirRecursively(animatedPackDir);
+		return false;
+	}
+
+	if (!TestNonLoopingAnimatedTexture(&animatedReplacer)) {
+		File::DeleteDirRecursively(animatedPackDir);
+		return false;
+	}
+
+	File::DeleteDirRecursively(animatedPackDir);
 	return true;
 }

@@ -113,6 +113,19 @@ struct ReplacementDesc {
 	GPUFormatSupport formatSupport;
 };
 
+struct AnimationDefinition {
+	std::vector<std::string> framePaths;
+	int frameCount = 0;
+	float fps = 0.0f;
+	bool loop = true;
+};
+
+struct AnimationInstance {
+	int currentFrame = 0;
+	double timer = 0.0;
+	bool active = false;
+};
+
 class ReplacedTexture;
 
 // These aren't actually all replaced, they can also represent a placeholder for a not-found
@@ -186,8 +199,19 @@ public:
 
 	int NumLevels() const {
 		_dbg_assert_(State() == ReplacementState::ACTIVE);
+		if (isAnimated_)
+			return 1;
 		return (int)levels_.size();
 	}
+
+	bool IsAnimated() const { return isAnimated_; }
+	int AnimationFrameCount() const { return animationDef_.frameCount; }
+	float AnimationFPS() const { return animationDef_.fps; }
+	bool AnimationLoops() const { return animationDef_.loop; }
+	int AnimationCurrentFrame() const { return animationInstance_.currentFrame; }
+	void ResetAnimation();
+	void UpdateAnimation(double now);
+	void UpdateAnimationFrame();  // Called each frame, handles internal timing
 
 	Draw::DataFormat Format() const {
 		_dbg_assert_(State() == ReplacementState::ACTIVE);
@@ -224,6 +248,10 @@ private:
 	// allowed (container formats like KTX2/DDS manage their own mip chain).
 	ReplacedImageType firstImageType_ = ReplacedImageType::INVALID;
 
+	AnimationDefinition animationDef_;
+	AnimationInstance animationInstance_;
+	bool isAnimated_ = false;
+	double lastAnimationUpdateTime_ = 0.0;
 	double lastUsed_ = 0.0;
 	LimitedWaitable *threadWaitable_ = nullptr;
 	std::mutex lock_;

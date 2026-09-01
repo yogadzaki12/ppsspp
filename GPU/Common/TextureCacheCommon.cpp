@@ -1801,6 +1801,9 @@ void TextureCacheCommon::PollReplacement(TexCacheEntry *entry, int *w, int *h, i
 			entry->replacedTexture->GetSize(0, w, h);
 			// Consider it already "scaled.".
 			entry->status |= TexStatus::IS_SCALED_OR_REPLACED;
+			
+			// Update animation timing for animated textures.
+			entry->replacedTexture->UpdateAnimationFrame();
 		}
 
 		// Remove the flag, even if it was invalid.

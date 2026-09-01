@@ -95,6 +95,51 @@ private:
 
 ReplacedTexture::ReplacedTexture(VFSBackend *vfs, const ReplacementDesc &desc) : vfs_(vfs), desc_(desc) {
 	logId_ = desc.logId;
+	ResetAnimation();
+}
+
+void ReplacedTexture::ResetAnimation() {
+	animationInstance_ = {};
+	animationInstance_.active = true;
+	lastAnimationUpdateTime_ = time_now_d();
+}
+
+void ReplacedTexture::UpdateAnimation(double now) {
+	if (!isAnimated_ || animationDef_.frameCount <= 1 || animationDef_.fps <= 0.0f) {
+		return;
+	}
+
+	const double frameDelta = 1.0 / (double)animationDef_.fps;
+	animationInstance_.timer += now;
+	if (animationInstance_.timer < frameDelta) {
+		return;
+	}
+
+	int framesToAdvance = (int)(animationInstance_.timer / frameDelta);
+	animationInstance_.timer -= framesToAdvance * frameDelta;
+	if (animationInstance_.loop) {
+		animationInstance_.currentFrame = (animationInstance_.currentFrame + framesToAdvance) % animationDef_.frameCount;
+	} else {
+		animationInstance_.currentFrame += framesToAdvance;
+		if (animationInstance_.currentFrame >= animationDef_.frameCount) {
+			animationInstance_.currentFrame = animationDef_.frameCount - 1;
+			animationInstance_.active = false;
+		}
+	}
+}
+
+void ReplacedTexture::UpdateAnimationFrame() {
+	if (!isAnimated_ || animationDef_.frameCount <= 1 || animationDef_.fps <= 0.0f) {
+		return;
+	}
+
+	double now = time_now_d();
+	double delta = now - lastAnimationUpdateTime_;
+	if (delta > 0.0) {
+		std::lock_guard<std::mutex> guard(lock_);
+		UpdateAnimation(delta);
+		lastAnimationUpdateTime_ = now;
+	}
 }
 
 ReplacedTexture::~ReplacedTexture() {
@@ -208,12 +253,105 @@ void ReplacedTexture::Prepare(VFSBackend *vfs) {
 	std::unique_lock<std::mutex> lock(lock_);
 
 	fmt = Draw::DataFormat::UNDEFINED;
+	isAnimated_ = false;
+	animationDef_ = {};
+	animationInstance_ = {};
+	animationInstance_.active = true;
 
 	Draw::DataFormat pixelFormat;
 	LoadLevelResult result = LoadLevelResult::LOAD_ERROR;
 	if (desc_.filenames.empty()) {
 		result = LoadLevelResult::DONE;
 	}
+
+	if (desc_.filenames.size() == 1 && desc_.filenames[0].find("/") == std::string::npos) {
+		// One file replacement, keep static behavior.
+	} else if (desc_.filenames.size() >= 1) {
+		std::string baseDir = desc_.filenames[0];
+		if (baseDir.find_last_of('/') != std::string::npos) {
+			baseDir = baseDir.substr(0, baseDir.find_last_of('/'));
+		}
+		Path animationPath = vfs_->toString();
+		if (animationPath.ToString().empty()) {
+			animationPath = basePath_;
+		}
+		// Directory animation is detected when the replacement target is a directory path that contains texture.ini with [Animation].
+		if (!desc_.filenames.empty()) {
+			std::string first = desc_.filenames[0];
+			if (first.rfind("/", 0) != 0 && first.find('/') != std::string::npos) {
+				std::string dirPrefix = first.substr(0, first.find_last_of('/'));
+				std::string iniPath = dirPrefix + "/texture.ini";
+				VFSFileReference *iniRef = vfs_->GetFile(iniPath.c_str());
+				if (iniRef) {
+					IniFile ini;
+					if (ini.LoadFromVFS(*vfs_, iniPath)) {
+						const Section *anim = ini.GetOrCreateSection("Animation");
+						if (anim) {
+							int fps = 0;
+							bool hasFps = anim->Get("fps", &fps);
+							bool loop = true;
+							anim->Get("loop", &loop);
+							if (hasFps && fps > 0) {
+								animationDef_.fps = (float)fps;
+								animationDef_.loop = loop;
+								std::vector<File::FileInfo> files;
+								vfs_->GetFileListing(dirPrefix.c_str(), &files, "png:");
+								for (const auto &file : files) {
+									if (file.isDirectory) continue;
+									std::string name = file.name;
+									std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return (char)std::tolower(c); });
+									if (StringEndsWith(name, ".png")) {
+										animationDef_.framePaths.push_back(dirPrefix + "/" + file.name);
+									}
+								}
+								std::sort(animationDef_.framePaths.begin(), animationDef_.framePaths.end());
+								animationDef_.frameCount = (int)animationDef_.framePaths.size();
+								isAnimated_ = animationDef_.frameCount > 1;
+							}
+						}
+						vfs_->ReleaseFile(iniRef);
+					}
+				}
+			}
+		}
+	}
+
+	if (isAnimated_) {
+		std::vector<std::string> animatedFilenames;
+		for (const auto &path : animationDef_.framePaths) {
+			animatedFilenames.push_back(path);
+		}
+		desc_.filenames = animatedFilenames;
+		if (desc_.filenames.empty()) {
+			SetState(ReplacementState::NOT_FOUND);
+			return;
+		}
+		for (int i = 0; i < std::min(MAX_REPLACEMENT_MIP_LEVELS, (int)desc_.filenames.size()); ++i) {
+			if (State() == ReplacementState::CANCEL_INIT) {
+				break;
+			}
+			if (desc_.filenames[i].empty()) {
+				break;
+			}
+			VFSFileReference *fileRef = vfs_->GetFile(desc_.filenames[i].c_str());
+			if (!fileRef) {
+				SetState(ReplacementState::NOT_FOUND);
+				return;
+			}
+			Draw::DataFormat pixelFormat = Draw::DataFormat::R8G8B8A8_UNORM;
+			LoadLevelResult res = LoadLevelData(fileRef, desc_.filenames[i], i, &pixelFormat);
+			if (res == LoadLevelResult::DONE || res == LoadLevelResult::LOAD_ERROR) {
+				if (res == LoadLevelResult::LOAD_ERROR) {
+					SetState(ReplacementState::NOT_FOUND);
+					return;
+				}
+				break;
+			}
+		}
+		SetState(ReplacementState::ACTIVE);
+		return;
+	}
+
 	for (int i = 0; i < std::min(MAX_REPLACEMENT_MIP_LEVELS, (int)desc_.filenames.size()); ++i) {
 		if (State() == ReplacementState::CANCEL_INIT) {
 			break;
@@ -741,6 +879,64 @@ ReplacedTexture::LoadLevelResult ReplacedTexture::LoadLevelData(VFSFileReference
 }
 
 bool ReplacedTexture::CopyLevelTo(int level, uint8_t *out, size_t outDataSize, int rowPitch) {
+	// Check for animated texture and read current frame (with lock protection)
+	int currentFrame = -1;
+	bool isActive = false;
+	{
+		std::lock_guard<std::mutex> guard(lock_);
+		if (isAnimated_ && animationDef_.frameCount > 0 && animationInstance_.active) {
+			currentFrame = animationInstance_.currentFrame;
+			isActive = true;
+		}
+	}
+
+	if (currentFrame >= 0 && isActive) {
+		if (animationDef_.framePaths.empty() || currentFrame >= (int)animationDef_.framePaths.size()) {
+			return false;
+		}
+		const std::string &path = animationDef_.framePaths[currentFrame];
+		VFSFileReference *fileRef = vfs_->GetFile(path.c_str());
+		if (!fileRef) {
+			return false;
+		}
+		Draw::DataFormat pixelFormat = Draw::DataFormat::R8G8B8A8_UNORM;
+		std::vector<uint8_t> frameData;
+		std::vector<uint8_t> outData;
+		outData.resize(levels_[0].w * levels_[0].h * 4);
+		// Load the active frame directly from the file as a single PNG decode, keeping per-frame decode cached by the reused ReplacedTexture.
+		VFSOpenFile *openFile = vfs_->OpenFileForRead(fileRef, &outData.size());
+		if (!openFile) {
+			vfs_->ReleaseFile(fileRef);
+			return false;
+		}
+		std::string pngdata;
+		pngdata.resize(outData.size());
+		pngdata.resize(vfs_->Read(openFile, &pngdata[0], pngdata.size()));
+		vfs_->CloseFile(openFile);
+		vfs_->ReleaseFile(fileRef);
+		png_image png = {};
+		png.version = PNG_IMAGE_VERSION;
+		if (!png_image_begin_read_from_memory(&png, &pngdata[0], pngdata.size())) {
+			return false;
+		}
+		png.format = PNG_FORMAT_RGBA;
+		frameData.resize(levels_[0].w * levels_[0].h * 4);
+		if (!png_image_finish_read(&png, nullptr, &frameData[0], levels_[0].w * 4, nullptr)) {
+			return false;
+		}
+		png_image_free(&png);
+		if (outData.size() < frameData.size()) {
+			outData.resize(frameData.size());
+		}
+		memcpy(outData.data(), frameData.data(), frameData.size());
+		
+		// Store decoded frame data
+		{
+			std::lock_guard<std::mutex> guard(lock_);
+			data_[0] = outData;
+		}
+	}
+
 	_assert_msg_((size_t)level < levels_.size(), "Invalid miplevel");
 	_assert_msg_(out != nullptr && rowPitch > 0, "Invalid out/pitch");
 
